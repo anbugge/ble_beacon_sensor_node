@@ -1,0 +1,45 @@
+# Silicon Labs Project Configuration Tools: slcp, v0, Component selection file.
+include:
+- path: ''
+  file_list:
+  - {path: ../app.h}
+package: Bluetooth
+configuration:
+- {name: SL_STACK_SIZE, value: '2048'}
+- {name: SL_HEAP_SIZE, value: '8630'}
+description: |
+  This example demonstrates the bare minimum needed for a Bluetooth C application that allows Over-the-Air Device Firmware Upgrading (OTA DFU). The application starts advertising after boot and restarts advertising after a connection is closed.
+label: encrypted_beacons-brd4184a
+source:
+- {path: main.c}
+- {path: app_properties.c}
+- {path: ../app.c}
+project_name: encrypted_beacons-brd4184a
+quality: production
+component:
+- {id: emlib_rmu}
+- {id: emlib_iadc}
+- instance: [vcom]
+  id: iostream_usart
+- {id: mpu}
+- {id: si70xx_driver}
+- instance: [sensor]
+  id: i2cspm
+- {id: sltb010a}
+- {id: printf}
+- {id: component_catalog}
+- {id: brd4184a}
+- {id: bootloader_interface}
+- {id: rail_util_pti}
+- {id: app_assert}
+- {id: sensor_rht}
+- {id: bluetooth}
+- {id: EFR32BG22C224F512IM40}
+other_file:
+- {path: create_bl_files.bat}
+- {path: create_bl_files.sh}
+tag: ['hardware:rf:band:2400']
+category: Bluetooth Examples
+toolchain_settings: []
+ui_hints: {}
+

@@ -1,0 +1,6 @@
+#ifndef APP_CONFIG_INCLUDED
+#define APP_CONFIG_INCLUDED
+
+#define APP_TX_POWER 60
+
+#endif
