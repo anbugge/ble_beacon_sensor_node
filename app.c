@@ -47,12 +47,11 @@ static uint8_t advertising_set_handle = 0xff;
 /** Convert msec to timer ticks. */
 #define TIMER_MS_2_TIMERTICK(ms) ((TIMER_CLK_FREQ * ms) / 1000)
 /** Wake up every TIMEBASE milliseconds */
-#define TIMEBASE 3000
+#define TIMEBASE 30000
 #define HEARTBEAT_TIMEBASE_DELTA 60
 #define TEMP_DIFF_THRESHOLD 100
 #define RH_DIFF_THRESHOLD   200
 
-#define SENSOR_VOLTAGE_READ 1
 #define DEBUG_OUT           1
 #define ENCRYPTION          1
 
@@ -188,6 +187,7 @@ void advertise(sl_sleeptimer_timer_handle_t *handle, void *data)
   // Start with a temperature measurement
   bool sending = false;
   sc = sl_si70xx_read_rh_and_temp(sl_i2cspm_sensor, SI7006_ADDR, &relativeHumidity, &temperature);
+  sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
   if ( sc != SL_STATUS_OK ){
     // Something went wrong, wait for the next attempt
     #if DEBUG_OUT
@@ -332,7 +332,10 @@ void setPayload(void){
 SL_WEAK void app_init(void)
 {
   sl_sleeptimer_init();
+  app_board_init();
+  sl_board_enable_sensor(SL_BOARD_SENSOR_RHT);
   sl_si70xx_init(sl_i2cspm_sensor, SI7021_ADDR);
+  sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
   initNonce();
   app_adcInit();
 }

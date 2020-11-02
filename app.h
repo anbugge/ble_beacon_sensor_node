@@ -13,6 +13,7 @@ void app_init(void);
  *****************************************************************************/
 void app_process_action(void);
 
+void     app_board_init(void);
 void     app_adcInit(void);
 uint16_t app_measureBatteryVoltage(void);
 

@@ -8,8 +8,15 @@
 #include "em_iadc.h"
 #include "em_cmu.h"
 
+#include "sl_board_control.h"
+
 static uint32_t measureOneAdcSample(void);
 
+void app_board_init(void)
+{
+  sl_board_disable_sensor(SL_BOARD_SENSOR_IMU);
+  sl_board_disable_sensor(SL_BOARD_SENSOR_MICROPHONE);
+}
 
 void app_adcInit(void)
 {
