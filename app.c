@@ -37,26 +37,36 @@
 #define RSTCAUSE_PIN EMU_RSTCAUSE_PIN
 #endif
 
-// The advertising set handle allocated from Bluetooth stack.
-static uint8_t advertising_set_handle = 0xff;
-
 /***********************************************************************************************//**
- * Application settings and variables
+ * Application settings
  **************************************************************************************************/
 #define TIMER_CLK_FREQ ((uint32_t)32768)
 /** Convert msec to timer ticks. */
 #define TIMER_MS_2_TIMERTICK(ms) ((TIMER_CLK_FREQ * ms) / 1000)
-/** Wake up every TIMEBASE milliseconds */
-#define TIMEBASE 30000
-#define HEARTBEAT_TIMEBASE_DELTA 60
-#define TEMP_DIFF_THRESHOLD 100
-#define RH_DIFF_THRESHOLD   200
 
 #define DEBUG_OUT           1
 #define ENCRYPTION          1
 
 #define USERDATA  ((uint32_t *) USERDATA_BASE)
-#define USER_PAGE_WORDS 128
+
+/** Wake up every TIMEBASE milliseconds */
+const unsigned TIMEBASE = 30000;
+
+/* Force send a packet this number of minutes since last packet */
+const unsigned HEARTBEAT_TIMEBASE_DELTA = 30;
+
+/* Send packet if temperature has changed more than this (celsius) */
+const float TEMP_DIFF_THRESHOLD 0.035;
+/* Send packet if humidity has changed more than this (percent) */
+const float HUM_DIFF_THRESHOLD 0.05;
+
+
+/***********************************************************************************************//**
+ * Global variables
+ **************************************************************************************************/
+
+// The advertising set handle allocated from Bluetooth stack.
+static uint8_t advertising_set_handle = 0xff;
 
 static uint32_t timeBaseCnt             = 0;
 static uint32_t lastPacketTimeBaseCnt   = 0;
@@ -68,9 +78,11 @@ static uint64_t timNum64        = 0;
 static uint32_t relativeHumidity = 0;
 static int32_t  temperature = 0x8000;  // = -128.0
 static int32_t  lastTemperature = 0x8000;
-static int32_t  lastRH = 0x8000;
+static int32_t  lastRelativeHumidity = 0x8000;
 static uint16_t batteryVoltage = 0;
 static uint32_t uptime = 0;
+
+const uint16_t swVersion = 0x20;
 
 static sl_sleeptimer_timer_handle_t measureTimer;
 static sl_sleeptimer_timer_handle_t delayTimer;
@@ -203,17 +215,20 @@ void advertise(sl_sleeptimer_timer_handle_t *handle, void *data)
   }
 
   // If a value has changed significantly, send anyways
-  if ( abs(temperature - lastTemperature) > TEMP_DIFF_THRESHOLD || abs(relativeHumidity - lastRH) > RH_DIFF_THRESHOLD){
+  if ( abs(temperature - lastTemperature) > 100 * TEMP_DIFF_THRESHOLD || abs(relativeHumidity - lastRelativeHumidity) > 100 * RH_DIFF_THRESHOLD){
     sending = true;
   }
 
   if ( sending ){
     lastTemperature = temperature;
-    lastRH = relativeHumidity;
+    lastRelativeHumidity = relativeHumidity;
     lastPacketTimeBaseCnt = timeBaseCnt;
 
-    temperature = (temperature + 50) / 100;
-    relativeHumidity = (relativeHumidity + 50) / 100;
+    temperature = (temperature + 5) / 10;
+    relativeHumidity = (relativeHumidity + 5) / 10;
+    if ( relativeHumidity > 10000 ){
+      relativeHumidity = 10000;
+    }
     batteryVoltage = (app_measureBatteryVoltage() + 5) / 10;
 
     uint32_t timRtcNow = RTCC_CounterGet();
@@ -265,7 +280,7 @@ void setPayload(void){
     packet.payload[8] = UINT32_TO_BYTE1(uptime);
     packet.payload[9] = UINT32_TO_BYTE0(uptime);
     packet.payload[10] = 0x00;
-    packet.payload[11] = 0x00;
+    packet.payload[11] = swVersion;
     packet.payload[12] = 0xAA;
     packet.payload[13] = 0x55;
     packet.payload[14] = 0x00;
@@ -281,7 +296,7 @@ void setPayload(void){
     printf("Humidity: %d\r\n", relativeHumidity);
     printf("Voltage: %d\r\n", batteryVoltage);
     printf("Uptime: %d\r\n", uptime);
-    printf("Packet counter: 0x%08x\r\n", packetCnt);
+    printf("Packet counter: %d\r\n", packetCnt);
   #endif
 
 #if ENCRYPTION
