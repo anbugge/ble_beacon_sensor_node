@@ -1,0 +1,17 @@
+[Unit]
+Description=BLE Sensor Listening Daemon (Mitemp and TB Sense)
+After=multi-user.target
+
+[Service]
+Type=idle
+User=ble-receiver
+Group=ble-receiver
+WorkingDirectory=/opt/ble-sensor-receive-daemon/
+ExecStart=/usr/bin/python3 /opt/ble-sensor-receive-daemon/ble-sensor-receive-daemon.py
+Restart=always
+TimeoutStartSec=10
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

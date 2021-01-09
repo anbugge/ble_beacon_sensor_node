@@ -1,0 +1,8 @@
+/var/log/ble-sensor-receive-daemon/ble-sensor-receive-daemon.log {
+  rotate 12
+  monthly
+  compress
+  missingok
+  notifempty
+}
+

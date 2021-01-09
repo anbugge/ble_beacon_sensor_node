@@ -1,0 +1,16 @@
+sensors:
+  Sauna:
+    addr: '00:0b:57:31:59:de'
+    topic: tb/sauna
+  Matbod:
+    addr: '14:b4:57:0b:09:56'
+    topic: tb/matbod
+
+mqtt:
+  broker: '192.168.86.100'
+  user: mosquitto
+  password: passwd
+  #cert: filename.pem
+
+aes-key: 00000000000000000000000000000000
+
