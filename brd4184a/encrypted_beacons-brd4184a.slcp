@@ -14,6 +14,7 @@ source:
 - {path: main.c}
 - {path: app_properties.c}
 - {path: ../app.c}
+- {path: app_bg22.c}
 project_name: encrypted_beacons-brd4184a
 quality: production
 component:
@@ -35,9 +36,6 @@ component:
 - {id: sensor_rht}
 - {id: bluetooth}
 - {id: EFR32BG22C224F512IM40}
-other_file:
-- {path: create_bl_files.bat}
-- {path: create_bl_files.sh}
 tag: ['hardware:rf:band:2400']
 category: Bluetooth Examples
 toolchain_settings: []

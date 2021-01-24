@@ -14,6 +14,7 @@ source:
 - {path: ../main.c}
 - {path: ../app.c}
 - {path: ../app_properties.c}
+- {path: app_mg12.c}
 project_name: encrypted_beacons-tbs2
 quality: production
 component:
@@ -34,9 +35,6 @@ component:
 - {id: app_assert}
 - {id: sensor_rht}
 - {id: bluetooth}
-other_file:
-- {path: create_bl_files.bat}
-- {path: create_bl_files.sh}
 tag: ['hardware:rf:band:2400']
 category: Bluetooth Examples
 toolchain_settings: []

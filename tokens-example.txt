@@ -1,0 +1,44 @@
+#
+# This token file declares what values are programmed for manufacturing
+# tokens on the chip. It can be read back by the "flash" or "convert" commands.
+#
+# Lines are composed of one of the following forms:
+#   <token-name> : <data>
+#   <token-name> : !ERASE!
+#
+# Omitted tokens are left untouched and not programmed on the chip.
+# Token names are case INsensitive.  All integer values are interpreted as hexadecimal
+# numbers in BIG-endian format and must be prefixed with '0x'.  Blank lines and 
+# lines beginning with '#' are ignored.
+# Byte arrays are given in hexadecimal format, without a leading 0x.
+# Specifying !ERASE! for the data sets that token to all F's.
+#
+#
+# The token data can be in one of three main forms: byte-array, integer, or string.
+# Byte-arrays are a series of hexadecimal numbers of the required length.
+# Integers are BIG endian hexadecimal numbers.
+# String data is a quoted set of ASCII characters.
+#
+
+# Legacy reset count. Now only used to initialize counter in NVM3.
+#RESET_COUNT        : 0xFFFFFFFF
+
+# Sensor enable flags. Only RH/Temp supported currently.
+FEATURE_RH_TEMP    : 0x1
+FEATURE_HALL       : 0x0
+FEATURE_ALS        : 0x0
+
+# Wake up every TIME_BASE milliseconds
+# 30 s -> 30000 = 0x7530
+SENSING_TIME_BASE  : 0x7530
+
+# Millidegrees temperature diff required to trigger an update
+# 0.1 C -> 100 = 0x64
+TEMP_DIFF_THRESHOLD: 0x64
+
+# 0.01 * x % RH diff required to trigger an update
+# 0.5 % -> 50 = 0x32
+RH_DIFF_THRESHOLD  : 0x32
+
+AES_KEY            : FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+

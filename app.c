@@ -1,6 +1,9 @@
 #include "app.h"
 #include "app_config.h"
 
+#include "tokens.h"
+#include "tokenutil.h"
+
 #include "em_common.h"
 #include "em_rtcc.h"
 #include "em_rmu.h"
@@ -15,6 +18,9 @@
 #include "sl_i2cspm_instances.h"
 #include "sl_si70xx.h"
 #include "sl_board_control.h"
+
+#include "nvm3.h"
+#include "nvm3_default.h"
 
 #include "gatt_db.h"
 #include "mbedtls/aes.h"
@@ -41,24 +47,22 @@
  * Application settings
  **************************************************************************************************/
 #define TIMER_CLK_FREQ ((uint32_t)32768)
-/** Convert msec to timer ticks. */
-#define TIMER_MS_2_TIMERTICK(ms) ((TIMER_CLK_FREQ * ms) / 1000)
 
 #define DEBUG_OUT           1
 #define ENCRYPTION          1
 
-#define USERDATA  ((uint32_t *) USERDATA_BASE)
-
-/** Wake up every TIMEBASE milliseconds */
 const unsigned TIMEBASE = 30000;
 
 /* Force send a packet this number of minutes since last packet */
-const unsigned HEARTBEAT_TIMEBASE_DELTA = 30;
+const unsigned heartbeatTimebaseDelta = 30;
 
 /* Send packet if temperature has changed more than this (celsius) */
-const float TEMP_DIFF_THRESHOLD 0.035;
+static float tempDiffThreshold;
 /* Send packet if humidity has changed more than this (percent) */
-const float HUM_DIFF_THRESHOLD 0.05;
+static float humDiffThreshold;
+
+// NVM3 key
+const uint32_t RESET_COUNTER_KEY = 0x01;
 
 
 /***********************************************************************************************//**
@@ -68,6 +72,7 @@ const float HUM_DIFF_THRESHOLD 0.05;
 // The advertising set handle allocated from Bluetooth stack.
 static uint8_t advertising_set_handle = 0xff;
 
+static uint32_t timeBase;
 static uint32_t timeBaseCnt             = 0;
 static uint32_t lastPacketTimeBaseCnt   = 0;
 static uint32_t packetCnt         = 0;
@@ -87,15 +92,20 @@ const uint16_t swVersion = 0x20;
 static sl_sleeptimer_timer_handle_t measureTimer;
 static sl_sleeptimer_timer_handle_t delayTimer;
 
-const uint8_t key[16] = {0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,
-                         0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88};
+const uint8_t *key = TOKEN_TO_ARRAY(AES_KEY_ADDR);
+
 static uint8_t ctr[16] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
                           0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
-void advertise(sl_sleeptimer_timer_handle_t *handle, void *data);
-void startMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data);
-void setPayload(void);
-void initNonce(void);
+/***********************************************************************************************//**
+ * Local functions
+ **************************************************************************************************/
+
+static void advertise(sl_sleeptimer_timer_handle_t *handle, void *data);
+static void startMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data);
+static void setPayload(void);
+static void initNonce(void);
+static bool initTokens(void);
 
 #if DEBUG_OUT
 void printArray(const uint8_t* binbuf, unsigned int binbuflen);
@@ -164,6 +174,9 @@ void enableSensor(sl_sleeptimer_timer_handle_t *handle, void *data)
   (void)data;
   sl_status_t sc;
   sl_board_enable_sensor(SL_BOARD_SENSOR_RHT);
+#if DEBUG_OUT
+  printf("Enable\r\n");
+#endif
 
   sc = sl_sleeptimer_start_timer_ms(&delayTimer, 80, startMeasurement, NULL, 0, 0);
   sl_app_assert(sc == SL_STATUS_OK, "[E: 0x%04x] Failed to start timer", sc);
@@ -174,6 +187,9 @@ void startMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data)
   (void)handle;
   (void)data;
 
+#if DEBUG_OUT
+  printf("Measure\r\n");
+#endif
   sl_status_t sc;
   sc = sl_si70xx_start_no_hold_measure_rh_and_temp(sl_i2cspm_sensor, SI7006_ADDR);
   if ( sc != SL_STATUS_OK ){
@@ -195,6 +211,10 @@ void advertise(sl_sleeptimer_timer_handle_t *handle, void *data)
   (void)handle;
   (void)data;
   sl_status_t sc;
+
+#if DEBUG_OUT
+  printf("Advertise\r\n");
+#endif
   
   // Start with a temperature measurement
   bool sending = false;
@@ -210,12 +230,12 @@ void advertise(sl_sleeptimer_timer_handle_t *handle, void *data)
 
 
   // Measure and send full packet regardless of differential state
-  if ( timeBaseCnt - lastPacketTimeBaseCnt > HEARTBEAT_TIMEBASE_DELTA ){
+  if ( timeBaseCnt - lastPacketTimeBaseCnt > heartbeatTimebaseDelta ){
     sending = true;
   }
 
   // If a value has changed significantly, send anyways
-  if ( abs(temperature - lastTemperature) > 100 * TEMP_DIFF_THRESHOLD || abs(relativeHumidity - lastRelativeHumidity) > 100 * RH_DIFF_THRESHOLD){
+  if ( abs(temperature - lastTemperature) > 100 * tempDiffThreshold || abs(relativeHumidity - lastRelativeHumidity) > 100 * humDiffThreshold){
     sending = true;
   }
 
@@ -348,6 +368,9 @@ SL_WEAK void app_init(void)
 {
   sl_sleeptimer_init();
   app_board_init();
+  if (!initTokens()){
+    printf("Tokens are not configured correctly, using defaults!\r\n");
+  }
   sl_board_enable_sensor(SL_BOARD_SENSOR_RHT);
   sl_si70xx_init(sl_i2cspm_sensor, SI7021_ADDR);
   sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
@@ -419,13 +442,16 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
                     "[E: 0x%04x] Failed to create advertising set\n",
                     (int)sc);
 
-
-      sc = sl_sleeptimer_start_periodic_timer_ms(&measureTimer, TIMEBASE,
+      sc = sl_sleeptimer_start_periodic_timer_ms(&measureTimer, timeBase,
                                                  enableSensor, (void *)NULL,
                                                  0, 0);
 
       sl_app_assert(sc == SL_STATUS_OK, "[E: 0x%04x] Failed to start timer", sc);
 
+#if DEBUG_OUT
+      // Manual immediate measurement
+      enableSensor(NULL, NULL);
+#endif
       break;
 
 
@@ -440,17 +466,28 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
 }
 
 void initNonce(void){
-  uint32_t rebootCnt = USERDATA[0];
-  uint32_t resetCause = RMU_ResetCauseGet();
-  RMU_ResetCauseClear();
-  if (resetCause == RSTCAUSE_PIN ){
-    // Only increment reboot count in case of pin reset (not brownout)
-    rebootCnt++;
+  uint32_t rebootCnt = 0;
+  Ecode_t ecode = nvm3_readCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, &rebootCnt);
+  if (ecode != ECODE_NVM3_OK){
+    printf("Reading reset counter from NVM3 failed: %08x\r\n", ecode);
+    rebootCnt = TOKEN_TO_UINT32(RESET_COUNT_ADDR);
     if (rebootCnt > 1024){
       rebootCnt = 0;
     }
-      MSC_ErasePage(USERDATA);
-    MSC_WriteWord(USERDATA, &rebootCnt, 4);
+    nvm3_writeCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, rebootCnt);
+  }
+  uint32_t resetCause = RMU_ResetCauseGet();
+  RMU_ResetCauseClear();
+#if DEBUG_OUT
+  printf("\r\nReset cause: %08x\r\n", resetCause);
+#endif
+  if (resetCause == RSTCAUSE_PIN ){
+    // Only increment reboot count in case of pin reset (not brownout)
+    ecode = nvm3_incrementCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, &rebootCnt);
+    if (rebootCnt > 1024){
+      rebootCnt = 0;
+      nvm3_writeCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, rebootCnt);
+    }
 #ifdef _SILICON_LABS_32B_SERIES_2_CONFIG_2
     CMU_ClockEnable(cmuClock_MSC, false);
 #endif
@@ -485,6 +522,20 @@ void initNonce(void){
   printf("MAC: ");
   printArray(mac, 6);
 #endif
+}
+
+bool initTokens(void){
+  bool success = true;
+  timeBase = TOKEN_TO_UINT32(SENSING_TIME_BASE_ADDR);
+  if (timeBase == 0xFFFFFFFF){
+      success = false;
+      timeBase = 30000;
+  }
+
+  tempDiffThreshold = (float)(0.001f * (TOKEN_TO_UINT32(TEMP_DIFF_THRESHOLD_ADDR)));
+  humDiffThreshold = (float)(0.01f * (TOKEN_TO_UINT32(RH_DIFF_THRESHOLD_ADDR)));
+
+  return success;
 }
 
 
