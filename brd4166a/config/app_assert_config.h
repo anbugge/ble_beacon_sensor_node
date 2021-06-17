@@ -3,7 +3,7 @@
  * @brief Application assert configuration
  *******************************************************************************
  * # License
- * <b>Copyright 2020 Silicon Laboratories Inc. www.silabs.com</b>
+ * <b>Copyright 2021 Silicon Laboratories Inc. www.silabs.com</b>
  *******************************************************************************
  *
  * The licensor of this software is Silicon Laboratories Inc. Your use of this
@@ -15,15 +15,21 @@
  *
  ******************************************************************************/
 
-#ifndef SL_APP_ASSERT_CONFIG_H
-#define SL_APP_ASSERT_CONFIG_H
+#ifndef APP_ASSERT_CONFIG_H
+#define APP_ASSERT_CONFIG_H
 
 // <<< Use Configuration Wizard in Context Menu >>>
 
-// <q SL_APP_ASSERT_ENABLE> Enable
+// <e APP_ASSERT_ENABLE> Assert component
 // <i> Enables Assert.
-#define SL_APP_ASSERT_ENABLE      1
+#define APP_ASSERT_ENABLE      1
+
+// <q APP_ASSERT_LOG_ENABLE> Logging
+// <i> Enables logging for Assert.
+#define APP_ASSERT_LOG_ENABLE      1
+
+// </e>
 
 // <<< end of configuration section >>>
 
-#endif // SL_APP_ASSERT_CONFIG_H
+#endif // APP_ASSERT_CONFIG_H

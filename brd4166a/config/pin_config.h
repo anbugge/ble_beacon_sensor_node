@@ -137,21 +137,6 @@
 // [USART1]$
 
 // $[USART2]
-// USART2 CLK on PF7
-#define USART2_CLK_PORT                          gpioPortF
-#define USART2_CLK_PIN                           7
-#define USART2_CLK_LOC                           18
-
-// USART2 RX on PK2
-#define USART2_RX_PORT                           gpioPortK
-#define USART2_RX_PIN                            2
-#define USART2_RX_LOC                            30
-
-// USART2 TX on PK0
-#define USART2_TX_PORT                           gpioPortK
-#define USART2_TX_PIN                            0
-#define USART2_TX_LOC                            29
-
 // [USART2]$
 
 // $[USART3]

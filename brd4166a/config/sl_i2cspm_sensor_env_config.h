@@ -15,45 +15,45 @@
  *
  ******************************************************************************/
 
-#ifndef SL_I2CSPM_SENSOR_CONFIG_H
-#define SL_I2CSPM_SENSOR_CONFIG_H
+#ifndef SL_I2CSPM_SENSOR_ENV_CONFIG_H
+#define SL_I2CSPM_SENSOR_ENV_CONFIG_H
 
 // <<< Use Configuration Wizard in Context Menu
 
 // <h>I2CSPM settings
 
-// <o SL_I2CSPM_SENSOR_REFERENCE_CLOCK> Reference clock frequency
-// <i> Frequency in Hz of the reference clock. 
+// <o SL_I2CSPM_SENSOR_ENV_REFERENCE_CLOCK> Reference clock frequency
+// <i> Frequency in Hz of the reference clock.
 // <i> Select 0 to use the frequency of the currently selected clock.
 // <i> Default: 0
-#define SL_I2CSPM_SENSOR_REFERENCE_CLOCK 0
+#define SL_I2CSPM_SENSOR_ENV_REFERENCE_CLOCK 0
 
-// <o SL_I2CSPM_SENSOR_SPEED_MODE> Speed mode
+// <o SL_I2CSPM_SENSOR_ENV_SPEED_MODE> Speed mode
 // <0=> Standard mode (100kbit/s)
 // <1=> Fast mode (400kbit/s)
 // <2=> Fast mode plus (1Mbit/s)
 // <i> Default: 0
-#define SL_I2CSPM_SENSOR_SPEED_MODE      0
+#define SL_I2CSPM_SENSOR_ENV_SPEED_MODE      0
 // </h> end I2CSPM config
 
 // <<< end of configuration section >>>
 
 // <<< sl:start pin_tool >>>
-// <i2c signal=SCL,SDA> SL_I2CSPM_SENSOR
-// $[I2C_SL_I2CSPM_SENSOR]
-#define SL_I2CSPM_SENSOR_PERIPHERAL              I2C1
-#define SL_I2CSPM_SENSOR_PERIPHERAL_NO           1
+// <i2c signal=SCL,SDA> SL_I2CSPM_SENSOR_ENV
+// $[I2C_SL_I2CSPM_SENSOR_ENV]
+#define SL_I2CSPM_SENSOR_ENV_PERIPHERAL          I2C1
+#define SL_I2CSPM_SENSOR_ENV_PERIPHERAL_NO       1
 
 // I2C1 SCL on PC5
-#define SL_I2CSPM_SENSOR_SCL_PORT                gpioPortC
-#define SL_I2CSPM_SENSOR_SCL_PIN                 5
-#define SL_I2CSPM_SENSOR_SCL_LOC                 17
+#define SL_I2CSPM_SENSOR_ENV_SCL_PORT            gpioPortC
+#define SL_I2CSPM_SENSOR_ENV_SCL_PIN             5
+#define SL_I2CSPM_SENSOR_ENV_SCL_LOC             17
 
 // I2C1 SDA on PC4
-#define SL_I2CSPM_SENSOR_SDA_PORT                gpioPortC
-#define SL_I2CSPM_SENSOR_SDA_PIN                 4
-#define SL_I2CSPM_SENSOR_SDA_LOC                 17
-// [I2C_SL_I2CSPM_SENSOR]$
+#define SL_I2CSPM_SENSOR_ENV_SDA_PORT            gpioPortC
+#define SL_I2CSPM_SENSOR_ENV_SDA_PIN             4
+#define SL_I2CSPM_SENSOR_ENV_SDA_LOC             17
+// [I2C_SL_I2CSPM_SENSOR_ENV]$
 // <<< sl:end pin_tool >>>
 
-#endif // SL_I2CSPM_SENSOR_CONFIG_H
+#endif // SL_I2CSPM_SENSOR_ENV_CONFIG_H

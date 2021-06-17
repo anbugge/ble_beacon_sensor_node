@@ -48,7 +48,7 @@
  **************************************************************************************************/
 #define TIMER_CLK_FREQ ((uint32_t)32768)
 
-#define DEBUG_OUT           1
+#define DEBUG_OUT           0
 #define ENCRYPTION          1
 
 const unsigned TIMEBASE = 30000;
@@ -60,6 +60,8 @@ const unsigned heartbeatTimebaseDelta = 30;
 static float tempDiffThreshold;
 /* Send packet if humidity has changed more than this (percent) */
 static float humDiffThreshold;
+
+static int txPower;
 
 // NVM3 key
 const uint32_t RESET_COUNTER_KEY = 0x01;
@@ -191,7 +193,7 @@ void startMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data)
   printf("Measure\r\n");
 #endif
   sl_status_t sc;
-  sc = sl_si70xx_start_no_hold_measure_rh_and_temp(sl_i2cspm_sensor, SI7006_ADDR);
+  sc = sl_si70xx_start_no_hold_measure_rh_and_temp(I2C_INST_RHT, SI7006_ADDR);
   if ( sc != SL_STATUS_OK ){
     // Something went wrong, wait for the next attempt
     #if DEBUG_OUT
@@ -218,7 +220,7 @@ void advertise(sl_sleeptimer_timer_handle_t *handle, void *data)
   
   // Start with a temperature measurement
   bool sending = false;
-  sc = sl_si70xx_read_rh_and_temp(sl_i2cspm_sensor, SI7006_ADDR, &relativeHumidity, &temperature);
+  sc = sl_si70xx_read_rh_and_temp(I2C_INST_RHT, SI7006_ADDR, &relativeHumidity, &temperature);
   sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
   if ( sc != SL_STATUS_OK ){
     // Something went wrong, wait for the next attempt
@@ -372,7 +374,7 @@ SL_WEAK void app_init(void)
     printf("Tokens are not configured correctly, using defaults!\r\n");
   }
   sl_board_enable_sensor(SL_BOARD_SENSOR_RHT);
-  sl_si70xx_init(sl_i2cspm_sensor, SI7021_ADDR);
+  sl_si70xx_init(I2C_INST_RHT, SI7021_ADDR);
   sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
   initNonce();
   app_adcInit();
@@ -429,12 +431,25 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
                     (int)sc);
 
 
-      int16_t ret_power;
+      int16_t set_max_power, set_min_power;
       // Set Transmit Power.
-      sc = sl_bt_system_set_max_tx_power(APP_TX_POWER, &ret_power);
+//      sc = sl_bt_system_set_tx_power(txPower, txPower, &set_min_power, &set_max_power);
+      sc = sl_bt_system_set_max_tx_power(txPower, &set_max_power);
       sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to set max TX power for Bluetooth\n",
+                    "[E: 0x%04x] Failed to set TX power for Bluetooth\n",
                     (int)sc);
+
+      int16_t support_max_power, support_min_power, rf_path_gain;
+      sc = sl_bt_system_get_tx_power_setting(&support_min_power, &support_max_power, &set_min_power, &set_max_power, &rf_path_gain);
+      sl_app_assert(sc == SL_STATUS_OK,
+                    "[E: 0x%04x] Failed to get max TX power for Bluetooth\n",
+                    (int)sc);
+
+      printf("Tx Power min-max:\r\n");
+      printf("Supported: %f-%f dBm\r\n", support_min_power * 0.1f, support_max_power * 0.1f);
+      printf("Set      : %f-%f dBm\r\n", support_min_power * 0.1f, support_max_power * 0.1f);
+      printf("RF Path gain: %f dBm\r\n", rf_path_gain * 0.1f);
+
 
       // Create an advertising set.
       sc = sl_bt_advertiser_create_set(&advertising_set_handle);
