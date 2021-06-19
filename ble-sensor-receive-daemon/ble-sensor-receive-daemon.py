@@ -254,11 +254,13 @@ def scan_ble_devices(secs):
                 else:
                     header("Received Encrypted Beacon", address, TB_SENSORS)
                     debug("Location: " + location, address)
+                    debug("RSSI: {}".format(device.rssi), address)
                     if DEBUG: debug("Payload " + valueString, address)
                     debug("Reboot count: " + str(rebootCount), address)
                     debug("Packet counter: " + str(packetCount), address)
                     sensorData["Reboot count"] = rebootCount
                     sensorData["Packet count"] = packetCount
+                    sensorData["RSSI"] = device.rssi
 
                     ctr = Counter.new(128, initial_value=nonce)
                     aes = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
