@@ -1,9 +1,9 @@
 /***************************************************************************//**
  * @file
- * @brief Packet Trace Information configuration file.
+ * @brief emlib_core Configuration
  *******************************************************************************
  * # License
- * <b>Copyright 2020 Silicon Laboratories Inc. www.silabs.com</b>
+ * <b>Copyright 2019 Silicon Laboratories Inc. www.silabs.com</b>
  *******************************************************************************
  *
  * SPDX-License-Identifier: Zlib
@@ -28,47 +28,19 @@
  *
  ******************************************************************************/
 
-#ifndef SL_RAIL_UTIL_PTI_CONFIG_H
-#define SL_RAIL_UTIL_PTI_CONFIG_H
-
-#include "rail_types.h"
+#ifndef EM_CORE_DEBUG_CONFIG_H
+#define EM_CORE_DEBUG_CONFIG_H
 
 // <<< Use Configuration Wizard in Context Menu >>>
-// <h> PTI Configuration
 
-// <o SL_RAIL_UTIL_PTI_MODE> PTI mode
-// <RAIL_PTI_MODE_UART=> UART
-// <RAIL_PTI_MODE_UART_ONEWIRE=> UART onewire
-// <RAIL_PTI_MODE_SPI=> SPI
-// <RAIL_PTI_MODE_DISABLED=> Disabled
-// <i> Default: RAIL_PTI_MODE_UART
-#define SL_RAIL_UTIL_PTI_MODE           RAIL_PTI_MODE_UART
+// <h> Core Configuration
 
-// <o SL_RAIL_UTIL_PTI_BAUD_RATE_HZ> PTI Baud Rate (Hertz)
-// <147800-20000000:1>
-// <i> Default: 1600000
-#define SL_RAIL_UTIL_PTI_BAUD_RATE_HZ   1600000
+// <q SL_EMLIB_CORE_ENABLE_INTERRUPT_DISABLED_TIMING> Enables measuring of interrupt disable time for debugging purposes.
+// <i> Default: 0
+// <i> If Enabled, either cycle_counter or systemview component must be added to project.
+#define SL_EMLIB_CORE_ENABLE_INTERRUPT_DISABLED_TIMING    0
 
 // </h>
+
 // <<< end of configuration section >>>
-
-// <<< sl:start pin_tool >>>
-// <pti signal=DOUT,(DFRAME),(DCLK)> SL_RAIL_UTIL_PTI
-// $[PTI_SL_RAIL_UTIL_PTI]
-#define SL_RAIL_UTIL_PTI_PERIPHERAL              PTI
-
-// PTI DOUT on PB12
-#define SL_RAIL_UTIL_PTI_DOUT_PORT               gpioPortB
-#define SL_RAIL_UTIL_PTI_DOUT_PIN                12
-#define SL_RAIL_UTIL_PTI_DOUT_LOC                6
-
-// PTI DFRAME on PB13
-#define SL_RAIL_UTIL_PTI_DFRAME_PORT             gpioPortB
-#define SL_RAIL_UTIL_PTI_DFRAME_PIN              13
-#define SL_RAIL_UTIL_PTI_DFRAME_LOC              6
-
-// [PTI_SL_RAIL_UTIL_PTI]$
-
-// <<< sl:end pin_tool >>>
-
-#endif // SL_RAIL_UTIL_PTI_CONFIG_H
+#endif // EM_CORE_CONFIG_H

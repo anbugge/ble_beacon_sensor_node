@@ -121,6 +121,16 @@
 // [TIMER1]$
 
 // $[USART0]
+// USART0 CTS on PA2
+#define USART0_CTS_PORT                          gpioPortA
+#define USART0_CTS_PIN                           2
+#define USART0_CTS_LOC                           30
+
+// USART0 RTS on PA3
+#define USART0_RTS_PORT                          gpioPortA
+#define USART0_RTS_PIN                           3
+#define USART0_RTS_LOC                           30
+
 // USART0 RX on PA1
 #define USART0_RX_PORT                           gpioPortA
 #define USART0_RX_PIN                            1
@@ -137,6 +147,21 @@
 // [USART1]$
 
 // $[USART2]
+// USART2 CLK on PF7
+#define USART2_CLK_PORT                          gpioPortF
+#define USART2_CLK_PIN                           7
+#define USART2_CLK_LOC                           18
+
+// USART2 RX on PK2
+#define USART2_RX_PORT                           gpioPortK
+#define USART2_RX_PIN                            2
+#define USART2_RX_LOC                            30
+
+// USART2 TX on PK0
+#define USART2_TX_PORT                           gpioPortK
+#define USART2_TX_PIN                            0
+#define USART2_TX_LOC                            29
+
 // [USART2]$
 
 // $[USART3]

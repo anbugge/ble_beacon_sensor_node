@@ -94,6 +94,7 @@
 #define SL_IOSTREAM_USART_VCOM_RX_PORT           gpioPortA
 #define SL_IOSTREAM_USART_VCOM_RX_PIN            6
 
+
 // [USART_SL_IOSTREAM_USART_VCOM]$
 // <<< sl:end pin_tool >>>
 

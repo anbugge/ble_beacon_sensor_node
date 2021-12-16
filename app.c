@@ -42,9 +42,9 @@
 
 
 // CONFIG
-const uint8_t swVersion = 0x20;
-/* Force send a packet this number of minutes since last packet */
-const unsigned heartbeatTimebaseDelta = 30;
+const uint8_t swVersion = 0x01;
+/* Force send a packet this number of seconds since last packet */
+const unsigned heartbeatTimebaseDelta = 30 * 60;
 
 // DEFINES
 typedef struct {
@@ -62,10 +62,10 @@ typedef struct {
 #endif
 
 #if ENCRYPTION
-const uint8_t packetId[2] = {0xAA,0x05}; /* PacketId AA05 for encrypted packet*/
+const uint8_t packetId[2] = {0xAA,0x06}; /* PacketId AA06 for V2 encrypted packet*/
 const bool encryption = true;
 #else
-const uint8_t packetId[2] = {0xAA,0x55}; /* PacketId AA55 for plaintext packet*/
+const uint8_t packetId[2] = {0xAA,0x56}; /* PacketId AA56 for V2 plaintext packet*/
 const bool encryption = false;
 #endif
 
@@ -94,13 +94,13 @@ typedef struct {
 // The advertising set handle allocated from Bluetooth stack.
 static uint8_t advertising_set_handle = 0xff;
 
-static uint32_t timeBase;
-static uint32_t packetCnt              = 0;
+// Large default time base, sensors can set lower values
+static uint32_t timeBase           = 120000;
+static uint32_t packetCnt          = 0;
 static uint32_t lastPacketSentTime = 0;
 
 static uint8_t  relativeHumidity = 0;
-static int32_t  temperature = 0x8000;  // = -128.0
-static uint16_t batteryVoltage = 0;
+static int16_t  temperature      = 0x8000;  // = -128.0
 
 static Measurement measurements[MAX_MEASUREMENT_COUNT];
 static size_t      measurementCount = 0;
@@ -127,45 +127,34 @@ static void initNonce(void);
 static bool initTokens(void);
 static void initPacket(void);
 static uint32_t htonl(uint32_t h);
-static uint8_t htons(uint16_t h);
+static uint16_t htons(uint16_t h);
 
 static void dbg_printArray(const uint8_t* binbuf, unsigned int binbuflen);
 
-/* Format:
- *  packetId = AA55
- *  payload =
- *        1-byte  relativeHumidity
- *        2-bytes temperature
- *        1-byte  voltage
- *        2-bytes uptime
- *        2-bytes spare
- *        4-bytes magic field AA55FF00 (must decrypt correctly = MAC)
- */
-typedef struct
-{
+typedef struct __attribute__((__packed__)) {
   uint8_t  swVersion;
   uint8_t  relativeHumidity;
   int16_t  temperature;
   uint16_t uptime;
-  int8_t   voltage;
+  uint8_t  voltage;
   uint8_t  extraType;
   uint32_t extraValue;
-  uint32_t magic;
+  uint32_t magic; // magic field AA55FF00 (must decrypt correctly = MAC)
 } PktPayload;
 
-typedef struct {
+typedef struct __attribute__((__packed__)) {
   uint8_t flagsLen;     /* Length of the Flags field. */
   uint8_t flagsType;    /* Type of the Flags field. */
   uint8_t flags;        /* Flags field. */
   uint8_t mandataLen;   /* Length of the Manufacturer Data field. */
   uint8_t mandataType;  /* Type of the Manufacturer Data field. */
-
   uint8_t packetId[2];
-  PktPayload payload;
+  uint8_t payload[sizeof(PktPayload)];
   uint32_t nonce;
 } AdvPacket;
 
 static AdvPacket packet;
+static PktPayload payload;
 
 // Add call to an init function which registers the sensor here
 static void initSensors(void)
@@ -173,7 +162,7 @@ static void initSensors(void)
   uint8_t enable;
   if (getTokenU8(FEATURE_RH_TEMP_ADDR, &enable) && enable){
     if (!rhtemp_init()){
-      dbg_printf("RH Temp init failed!");
+      dbg_printf("RH Temp init failed!\r\n");
     }
   }
   batt_init();
@@ -187,12 +176,11 @@ void app_init(void)
   sl_sleeptimer_init();
   app_board_init();
   if (!initTokens()){
-    puts("Tokens are not configured correctly, using defaults!");
+    dbg_printf("Tokens are not configured correctly, using defaults!\r\n");
   }
 
   initSensors();
   initPacket();
-  initNonce();
 }
 
 /**************************************************************************//**
@@ -206,26 +194,40 @@ void app_process_action(void)
 void app_enableSensor(SensorId id, uint32_t interval)
 {
   if (id >= SENSOR_ID_COUNT){
-    printf("Invalid sensor ID: %d\r\n", id);
+    dbg_printf("Invalid sensor ID: %d\r\n", id);
     return;
   }
   sensorStates[id].enabled = true;
   sensorStates[id].measurementInterval = interval;
   sensorStates[id].lastMeasurementStarted = 0;
+
+  if (interval * 1000 < timeBase){
+    timeBase = interval * 1000;
+  }
 }
+
+
+
+
 
 void app_registerMeasurement(MeasurementType type, uint32_t value, bool send)
 {
+  dbg_printf("Register measurement: Type: %d, Value: %lu (Send: %d)\r\n", type, value, send);
   if ( type == TemperatureMeasurement ) {
+    // Already converted to fit in int16_t
     temperature = value;
   }
   else if ( type == RelHumidityMeasurement ) {
+    // Already converted to fit in uint8_t
     relativeHumidity = value;
   }
   else {
     if ( measurementCount < MAX_MEASUREMENT_COUNT ){
       measurements[measurementCount] = (Measurement){type, value};
       measurementCount++;
+    }
+    else {
+      dbg_printf("ERROR: %d > MAX_MEASUREMENT_COUNT (%d)\r\n", measurementCount+1, MAX_MEASUREMENT_COUNT);
     }
   }
 
@@ -257,6 +259,7 @@ static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
     // Do init procedure: Dummy send, increment reset counter, proceed with real packet
     if (initSequenceStage == 0){
       // Prepare dummy packet - no encryption yet to not leak any information
+      dbg_printf("Sending dummy packet to test for BOD. All data 0xA5.\r\n");
       memset(&packet.payload, 0xA5, sizeof(packet.payload));
       packet.nonce = 0;
       sendPacket(1);
@@ -268,7 +271,7 @@ static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
       // Let the advertiser send the packet, be back in a second
       return;
     }
-    else if ( initSequenceStage == 2 ){
+    else if ( initSequenceStage == 1 ){
       // Sending went OK - we can increment reset counter and start encrpyting
       initNonce();
       sc = sl_sleeptimer_restart_periodic_timer_ms(&timebaseTimer, timeBase,
@@ -286,10 +289,9 @@ static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
   for (size_t i = 0; i < SENSOR_ID_COUNT; i++){
     if (sensorStates[i].enabled){
       uint32_t timeSinceLastMeasurement = uptime - sensorStates[i].lastMeasurementStarted;
-      if (timeSinceLastMeasurement > sensorStates[i].measurementInterval){
-        if (i == RhTempSensor){
-          rhtemp_measure();
-        }
+      if (timeSinceLastMeasurement >= sensorStates[i].measurementInterval){
+        // Start measurement for this sensor
+        measureFunctions[i]();
         sensorStates[i].lastMeasurementStarted = uptime;
       }
     }
@@ -298,7 +300,7 @@ static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
   
   // Measure and send full packet regardless of differential state
   if ( uptime - lastPacketSentTime > heartbeatTimebaseDelta ){
-    dbg_printf("FORCE SEND!\n");
+    dbg_printf("FORCE SEND!\r\n");
     // Just register a dummy measurement to force a packet send
     app_registerMeasurement(TemperatureMeasurement, temperature, true);
   }
@@ -315,7 +317,7 @@ static void sendPacket(uint8_t numPackets){
                                  (uint8_t *)(&packet)
                                  );
   app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to set advertiser data\n", sc);
+                "[E: 0x%04x] Failed to set advertiser data\r\n", sc);
 
   // Set advertising parameters. 20-30 ms advertisement interval.
   sc = sl_bt_advertiser_set_timing(
@@ -325,7 +327,7 @@ static void sendPacket(uint8_t numPackets){
     0,        // adv. duration
     numPackets); // max. num. adv. events
   app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to set advertising timing\n", sc);
+                "[E: 0x%04x] Failed to set advertising timing\r\n", sc);
 
   // Start advertising in user mode and disable connections.
   sc = sl_bt_advertiser_start(
@@ -333,7 +335,7 @@ static void sendPacket(uint8_t numPackets){
         advertiser_user_data,
         advertiser_non_connectable);
   app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to start advertising\n", sc);
+                "[E: 0x%04x] Failed to start advertising\r\n", sc);
 
 }
 
@@ -346,27 +348,32 @@ void setPayload(void){
     // Set high bit to indicate that this is encoded hours
     uptime = 0x8000 | (uptime & 0x7FFF);
   }
-  batteryVoltage = (batt_measureBatteryVoltage() + 5) / 10;
-  packet.payload.temperature = htons(temperature);
-  packet.payload.relativeHumidity = relativeHumidity;
-  packet.payload.voltage = htons(batteryVoltage);
-  packet.payload.uptime = uptime;
-  packet.payload.swVersion = swVersion;
-  packet.payload.magic = htonl(0xAA5500FF);
+  // Convert 3300 mV -> 165 for uint8_5
+  float voltage = batt_measureBatteryVoltage() / 20.0f + 0.5f;
+  if (voltage > 254) {
+    voltage = 254;
+  }
+  
+  payload.temperature = htons(temperature);
+  payload.relativeHumidity = relativeHumidity;
+  payload.voltage = (uint8_t)voltage;
+  payload.uptime = htons(uptime);
+  payload.swVersion = swVersion;
+  payload.magic = htonl(0xAA5500FF);
 
   if (measurementCount > 0){
     // Rethink this.. FILO is only good if (only) the last measurment needs to be sent quickly
-    packet.payload.extraType = measurements[measurementCount].type;
-    packet.payload.extraValue = measurements[measurementCount].value;
+    payload.extraType = measurements[measurementCount].type;
+    payload.extraValue = measurements[measurementCount].value;
     measurementCount--;
   }
 
   packet.nonce = htonl(packetCnt);
 
   dbg_printf("\r\nNew Packet\r\n");
-  dbg_printf("Temperature: %ld\r\n", temperature);
-  dbg_printf("Humidity: %d\r\n", relativeHumidity);
-  dbg_printf("Voltage: %d\r\n", batteryVoltage);
+  dbg_printf("Temperature: %d (%.2f C)\r\n", temperature, temperature / 100.0f);
+  dbg_printf("Humidity: %d (%.2f %%)\r\n", relativeHumidity, relativeHumidity / 2.0f);
+  dbg_printf("Voltage: %d (%.2f V)\r\n", (uint8_t)voltage, (voltage - 0.5f) / 50.0f);
   dbg_printf("Uptime: %ld\r\n", uptime);
   dbg_printf("Packet counter: %ld\r\n", packetCnt);
 
@@ -374,6 +381,9 @@ void setPayload(void){
 
   if (encryption){
     encryptPayload();
+  }
+  else {
+    memcpy(&packet.payload, &payload, sizeof(payload));
   }
 }
 
@@ -383,18 +393,18 @@ static void encryptPayload(void){
   dbg_printArray(key, 16);
 
   dbg_printf("Plaintext: 0x");
-  dbg_printArray((uint8_t*)&packet.payload, 16);
-
-  dbg_printf("Counter: 0x");
-  dbg_printArray(ctr, 16);
+  dbg_printArray((uint8_t*)&payload, sizeof(payload));
 
   // Prepare counter value
   memcpy(&ctr[12], &packet.nonce, sizeof(packet.nonce));
+  
+  dbg_printf("Counter: 0x");
+  dbg_printArray(ctr, 16);
 
   mbedtls_aes_context ctx;
   size_t ncOffset = 0;
   int stat;
-  static uint8_t encPkt[sizeof(packet.payload)];
+  static uint8_t encPkt[sizeof(payload)];
   static uint8_t streamBlock[16];
   memset(streamBlock, 0, sizeof(streamBlock));
 
@@ -402,13 +412,13 @@ static void encryptPayload(void){
   stat = mbedtls_aes_setkey_enc(&ctx, key, 128);
   app_assert(stat == SL_STATUS_OK, "AES setkey failed");
 
-  stat = mbedtls_aes_crypt_ctr(&ctx, sizeof(packet.payload), &ncOffset, ctr, streamBlock, (uint8_t*)&packet.payload, encPkt);
+  stat = mbedtls_aes_crypt_ctr(&ctx, sizeof(payload), &ncOffset, ctr, streamBlock, (uint8_t*)&payload, encPkt);
   app_assert(stat == SL_STATUS_OK, "AES Encrypt");
 
-  memcpy(&packet.payload, encPkt, sizeof(packet.payload));
+  memcpy(&packet.payload, encPkt, sizeof(payload));
 
   dbg_printf("Ciphertext: 0x");
-  dbg_printArray(encPkt, 16);
+  dbg_printArray(encPkt, sizeof(encPkt));
 }
 
 /**************************************************************************//**
@@ -433,7 +443,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       // Extract unique ID from BT Address.
       sc = sl_bt_system_get_identity_address(&address, &address_type);
       app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to get Bluetooth address\n",
+                    "[E: 0x%04x] Failed to get Bluetooth address\r\n",
                     (int)sc);
 
       // Pad and reverse unique ID to get System ID.
@@ -451,7 +461,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
                                                    sizeof(system_id),
                                                    system_id);
       app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to write attribute\n",
+                    "[E: 0x%04x] Failed to write attribute\r\n",
                     (int)sc);
 
 
@@ -459,25 +469,24 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       // Set Transmit Power.
       sc = sl_bt_system_set_tx_power(txPower, txPower, &set_min_power, &set_max_power);
       app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to set TX power for Bluetooth\n",
+                    "[E: 0x%04x] Failed to set TX power for Bluetooth\r\n",
                     (int)sc);
 
       int16_t support_max_power, support_min_power, rf_path_gain;
       sc = sl_bt_system_get_tx_power_setting(&support_min_power, &support_max_power, &set_min_power, &set_max_power, &rf_path_gain);
       app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to get max TX power for Bluetooth\n",
+                    "[E: 0x%04x] Failed to get max TX power for Bluetooth\r\n",
                     (int)sc);
 
-      printf("Tx Power min-max:\r\n");
-      printf("Supported: %f-%f dBm\r\n", support_min_power * 0.1f, support_max_power * 0.1f);
-      printf("Set      : %f-%f dBm\r\n", set_min_power * 0.1f, set_max_power * 0.1f);
-      printf("RF Path gain: %f dBm\r\n", rf_path_gain * 0.1f);
+      dbg_printf("Tx Power min-max:\r\n");
+      dbg_printf("Supported: %f-%f dBm\r\n", support_min_power * 0.1f, support_max_power * 0.1f);
+      dbg_printf("Set      : %f-%f dBm\r\n", set_min_power * 0.1f, set_max_power * 0.1f);
 
 
       // Create an advertising set.
       sc = sl_bt_advertiser_create_set(&advertising_set_handle);
       app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to create advertising set\n",
+                    "[E: 0x%04x] Failed to create advertising set\r\n",
                     (int)sc);
 
       sc = sl_sleeptimer_start_periodic_timer_ms(&timebaseTimer, timeBase,
@@ -487,8 +496,10 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       app_assert(sc == SL_STATUS_OK, "[E: 0x%04x] Failed to start timer", (int)sc);
 
 #if DEBUG_OUT
-      // Manual immediate measurement
-      rhtemp_measure();
+      // Faster startup while debugging
+      sl_sleeptimer_restart_periodic_timer_ms(&timebaseTimer, 1000,
+                                              timebaseTick, NULL,
+                                              0, 0);
 #endif
       break;
 
@@ -506,7 +517,7 @@ void initNonce(void){
   // Read/initialize reset counter object
   ecode = nvm3_readCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, &rebootCnt);
   if (ecode != ECODE_NVM3_OK){
-    printf("Reading reset counter from NVM3 failed: %08x\r\n", (int)ecode);
+    dbg_printf("Reading reset counter from NVM3 failed: %08x\r\n", (int)ecode);
     // Initialize NVM3 token from legacy MFG token
     rebootCnt = TOKEN_TO_UINT32(RESET_COUNT_ADDR);
     nvm3_writeCounter(nvm3_defaultHandle, RESET_COUNTER_KEY, rebootCnt);
@@ -546,11 +557,12 @@ void initNonce(void){
 }
 
 bool initTokens(void){
+
   bool success = true;
-  timeBase = TOKEN_TO_UINT32(SENSING_TIME_BASE_ADDR);
-  if (timeBase == 0xFFFFFFFF){
-      success = false;
-      timeBase = 30000;
+
+  if (!getTokenU32(TX_POWER_ADDR, (uint32_t*)&txPower)){
+    success = false;
+    txPower = 0;
   }
 
   return success;
@@ -595,7 +607,7 @@ static uint32_t htonl(uint32_t h)
         | ((uint32_t) data[0] << 24);
 }
 
-static uint8_t htons(uint16_t h)
+static uint16_t htons(uint16_t h)
 {
   uint8_t *data = (uint8_t*)&h;
   return ((uint16_t) data[1] << 0) | ((uint16_t) data[0] << 8);

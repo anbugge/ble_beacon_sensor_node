@@ -1,43 +1,62 @@
 # Silicon Labs Project Configuration Tools: slcp, v0, Component selection file.
-include:
-- path: ''
-  file_list:
-  - {path: ../app.h}
-package: Bluetooth
-configuration:
-- {name: SL_STACK_SIZE, value: '2048'}
-- {name: SL_HEAP_SIZE, value: '8630'}
+project_name: encrypted_beacons-brd4184a
+label: encrypted_beacons-brd4184a
 description: |
   This example demonstrates the bare minimum needed for a Bluetooth C application that allows Over-the-Air Device Firmware Upgrading (OTA DFU). The application starts advertising after boot and restarts advertising after a connection is closed.
-label: encrypted_beacons-brd4184a
+category: Bluetooth Examples
+package: Bluetooth
+quality: production
 source:
 - {path: ../main.c}
 - {path: ../app.c}
 - {path: ../app_properties.c}
+- {path: ../tokenutil.c}
+- {path: ../sensors/battery_voltage_bg22.c}
+- {path: ../sensors/battery_voltage.c}
+- {path: ../sensors/rhtemp.c}
+- {path: ../sensors/sensor_config.c}
 - {path: app_bg22.c}
-project_name: encrypted_beacons-brd4184a
-quality: production
+tag: ['hardware:rf:band:2400']
+include:
+- path: ..
+  file_list:
+  - {path: app.h}
+- {path: ''}
+sdk: {id: gecko_sdk, version: 3.2.3}
+toolchain_settings: []
 component:
+- {id: power_manager}
+- {id: bluetooth_feature_gatt_server}
+- {id: nvm3_lib}
+- {id: bluetooth_feature_sm}
+- {id: mpu}
+- {id: mbedtls_sha256}
+- {id: gatt_configuration}
+- {id: sltb010a}
+- {id: bluetooth_stack}
+- {id: rail_util_pti}
+- {id: bluetooth_feature_gatt}
 - {id: emlib_rmu}
 - {id: emlib_iadc}
+- {id: mbedtls_cipher_ctr}
+- {id: bluetooth_feature_connection}
+- {id: bluetooth_feature_advertiser}
 - instance: [vcom]
   id: iostream_usart
-- {id: mpu}
 - {id: si70xx_driver}
+- {id: bluetooth_feature_system}
+- {id: bluetooth_feature_scanner}
 - instance: [sensor]
   id: i2cspm
-- {id: sltb010a}
 - {id: printf}
 - {id: component_catalog}
 - {id: brd4184a}
 - {id: bootloader_interface}
-- {id: rail_util_pti}
 - {id: app_assert}
 - {id: sensor_rht}
-- {id: bluetooth}
 - {id: EFR32BG22C224F512IM40}
-tag: ['hardware:rf:band:2400']
-category: Bluetooth Examples
-toolchain_settings: []
+configuration:
+- {name: SL_STACK_SIZE, value: '2048'}
+- {name: SL_HEAP_SIZE, value: '8630'}
 ui_hints: {}
 

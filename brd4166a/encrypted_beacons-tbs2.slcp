@@ -1,42 +1,60 @@
 # Silicon Labs Project Configuration Tools: slcp, v0, Component selection file.
-include:
-- path: ''
-  file_list:
-  - {path: app.h}
-package: Bluetooth
-configuration:
-- {name: SL_STACK_SIZE, value: '2048'}
-- {name: SL_HEAP_SIZE, value: '8630'}
+project_name: encrypted_beacons-tbs2
+label: encrypted_beacons-tbs2
 description: |
   This example demonstrates the bare minimum needed for a Bluetooth C application that allows Over-the-Air Device Firmware Upgrading (OTA DFU). The application starts advertising after boot and restarts advertising after a connection is closed.
-label: encrypted_beacons-tbs2
+category: Bluetooth Examples
+package: Bluetooth
+quality: production
 source:
 - {path: ../main.c}
 - {path: ../app.c}
 - {path: ../app_properties.c}
+- {path: ../tokenutil.c}
+- {path: ../sensors/battery_voltage_mg12.c}
+- {path: ../sensors/battery_voltage.c}
+- {path: ../sensors/rhtemp.c}
+- {path: ../sensors/sensor_config.c}
 - {path: app_mg12.c}
-project_name: encrypted_beacons-tbs2
-quality: production
+tag: ['hardware:rf:band:2400']
+include:
+- path: ..
+  file_list:
+  - {path: app.h}
+- {path: ''}
+sdk: {id: gecko_sdk, version: 3.2.3}
+toolchain_settings: []
 component:
 - {id: emlib_adc}
 - {id: emlib_rmu}
+- {id: power_manager}
+- {id: mbedtls_cipher_ctr}
+- {id: bluetooth_feature_connection}
+- {id: bluetooth_feature_gatt_server}
 - {id: brd4166a}
+- {id: bluetooth_feature_advertiser}
+- {id: nvm3_lib}
 - instance: [vcom]
   id: iostream_usart
+- {id: bluetooth_feature_sm}
 - {id: mpu}
 - {id: si70xx_driver}
+- {id: bluetooth_feature_system}
 - {id: EFR32MG12P332F1024GL125}
+- {id: gatt_configuration}
+- {id: bluetooth_feature_scanner}
 - instance: [sensor]
   id: i2cspm
 - {id: printf}
+- {id: bluetooth_stack}
 - {id: component_catalog}
 - {id: bootloader_interface}
 - {id: rail_util_pti}
 - {id: app_assert}
+- {id: bluetooth_feature_gatt}
 - {id: sensor_rht}
-- {id: bluetooth}
-tag: ['hardware:rf:band:2400']
-category: Bluetooth Examples
-toolchain_settings: []
+configuration:
+- {name: SL_STACK_SIZE, value: '2048'}
+- {name: SL_HEAP_SIZE, value: '8630'}
 ui_hints: {}
 

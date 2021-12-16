@@ -1,9 +1,7 @@
 #!/usr/bin/python3
 
 from bluepy.btle import Scanner
-# from humidity import rh2ah
 from datetime import datetime, timedelta
-from time import localtime, strftime, sleep
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 from collections import namedtuple
@@ -15,6 +13,7 @@ import socket
 import os
 import sys
 import yaml
+import time
 import hassautoconf as autoconf
 
 
@@ -24,7 +23,7 @@ import hassautoconf as autoconf
 # Logging
 LOGFILE = "/var/log/ble-sensor-receive-daemon/ble-sensor-receive-daemon.log"
 verbose = True
-DEBUG   = False
+DEBUG   = True
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -37,6 +36,8 @@ SECRET_KEY = bytes.fromhex("5d1281ee0cac2c99a5ec7288c7a85f48")
 MAGIC_BYTES = "aa5500ff"
 PLAINTEXT_BEACON_ID = "aa55"
 ENCRYPTED_BEACON_ID = "aa05"
+PLAINTEXT_BEACON_ID_V2 = "aa56"
+ENCRYPTED_BEACON_ID_V2 = "aa06"
 
 # Availability settings
 EXPIRE_AFTER = 4800 # Seconds since last seen is considered offline
@@ -52,8 +53,6 @@ class Sensor:
     availability = ''
     last_pkts = []
 
-TB_SENSORS = dict()
-
 SCRIPT_DIR = os.path.dirname( os.path.abspath(__file__) )
 
 #--------------------------------------------------
@@ -61,7 +60,7 @@ SCRIPT_DIR = os.path.dirname( os.path.abspath(__file__) )
 #--------------------------------------------------
 def debug(text, address=""):
     logfile = open(LOGFILE, "a")
-    line = strftime(TIME_FORMAT, localtime()) + " "
+    line = time.strftime(TIME_FORMAT, time.localtime()) + " "
     if address != "":
         line += address + " "
     line += text
@@ -75,108 +74,136 @@ def debug(text, address=""):
 #--------------------------------------------------
 # MQTT Control and Functions
 #--------------------------------------------------
-def subscribe_topics():
-    for address in TB_SENSORS:
-        client.subscribe(TB_SENSORS[address].topic + NODE_TOPIC)
+class Mqtt:
 
+    # All init of MQTT connection."
+    def __init__(self, cfg, sensors):
+        self.broker = cfg['broker']
+        if 'cert' in cfg:
+            auth = 'cert'
+        else:
+            auth = 'pwd'
 
-# All init of MQTT connection."
-def mqtt_init(cfg):
-    broker = cfg['broker']
-    if 'cert' in cfg:
-        auth = 'cert'
-    else:
-        auth = 'pwd'
+        self.sensors = sensors
 
-    def on_connect(client, userdata, flags, rc):
+        self.q = queue.Queue()
+        self.client = mqtt.Client(CLIENT_NAME)
+        
+        # Bind callback functions
+        self.client.on_connect=self.on_connect
+        self.client.on_disconnect=self.on_disconnect
+        self.client.on_message=self.on_message
+        self.client.on_subscribe=self.on_subscribe
+
+        self.connected_flag = False
+
+        if auth == 'cert':
+            ca_with_path = os.path.join(SCRIPT_DIR, cfg['cert'])
+            self.client.tls_set(ca_certs=ca_with_path, tls_version=2)
+            self.client.tls_insecure_set(True)
+        else:
+            self.client.username_pw_set(cfg['user'], cfg['password'])
+
+        self.client.loop_start()
+        debug("Connecting to broker " + self.broker)
+
+        #Establish connection, and retry until success
+        try:
+            self.client.connect(self.broker)      #connect to self.broker
+        except:
+            attempts = 1
+            while not self.connected_flag:
+                try:
+                    self.client.connect(self.broker)      #connect to broker
+                except KeyboardInterrupt as e:
+                    raise e
+                except Exception as e:
+                    debug("Connection attempt " + str(attempts) + " failed, retrying")
+                    debug(str(e))
+                    attempts = attempts + 1
+                    time.sleep(5)
+    
+    def on_connect(self, client, userdata, flags, rc):
         if rc==0:
-            debug("Connected to {}".format(broker))
-            subscribe_topics()
-            client.connected_flag=True #set flag
+            debug("Connected to {}".format(self.broker))
+            self.subscribe_topics()
+            self.connected_flag = True
+            self.autoconfig()
         else:
             debug("Bad connection Returned code=" + str(rc))
 
-    def on_disconnect(client, userdata, rc):
-        debug("Disconnected from {}. Return code: {}".format(broker, rc))
-        client.connected_flag=False
+    def on_disconnect(self, client, userdata, rc):
+        debug("Disconnected from {}. Return code: {}".format(self.broker, rc))
+        self.connected_flag = False
 
-    def on_subscribe(client, userdata, mid, granted_qos):
+    def on_subscribe(self, client, userdata, mid, granted_qos):
         debug("Subscribed to topic, mid: " + str(mid))
 
-    def on_message(client, userdata, message):
+    def on_message(self, client, userdata, message):
         #debug("Received message on " + message.topic)
         topic = message.topic
         payload = message.payload.decode('utf-8')
-        q.put([topic, payload])
+        self.q.put([topic, payload])
 
-    global client # Estabslish global client
-    global q
-    q = queue.Queue()
-    client = mqtt.Client(CLIENT_NAME)
-    client.on_connect=on_connect  #bind call back function
-    client.on_message=on_message
-    client.on_disconnect=on_disconnect
-    client.on_subscribe=on_subscribe
-    mqtt.Client.connected_flag=False #create flags in class
+    def subscribe_topics(self):
+        for address in self.sensors:
+            self.client.subscribe(self.sensors[address].topic + NODE_TOPIC)
 
-    if auth == 'cert':
-        ca_with_path = os.path.join(SCRIPT_DIR, cfg['cert'])
-        client.tls_set(ca_certs=ca_with_path, tls_version=2)
-        client.tls_insecure_set(True)
-    else:
-        client.username_pw_set(cfg['user'], cfg['password'])
 
-    client.loop_start()
-    debug("Connecting to broker " + broker)
+    def autoconfig(self):
+        for (addr, s) in self.sensors.items():
+            for senstype in ["Temperature", "Humidity", "Battery Voltage"]:
+        #        device = {"model": "Thunderboard Sense BLE Node",
+        #                "manufacturer": "Silicon Labs",
+        #                "identifiers": addr + "-" + senstype,
+        #                "name": self.sensors[a].name + " " + senstype}
+                autoconf.register_sensor(self.client, 
+                                        s.topic,
+                                        s.name + " " + senstype,
+                                        senstype.lower().replace(" ", "-"),
+                                        senstype, 
+        #                                device=device,
+        #                                unique_id=addr + "-" + senstype,
+                                        expire_after=EXPIRE_AFTER)
 
-    #Establish connection, and retry until success
-    try:
-        client.connect(broker)      #connect to broker
-    except:
-        attempts = 1
-        while not client.connected_flag:
-            try:
-                client.connect(broker)      #connect to broker
-            except:
-                debug("Connection attempt " + str(attempts) + " failed, retrying")
-                attempts = attempts + 1
-                sleep(5)
-    while not client.connected_flag: #Make sure we are connected.
-        sleep(1)
+    def process_messages(self):
+        while not self.q.empty():
+            message = self.q.get()
+            self.process_message(message)
+
+    def process_message(self, message):
+        topic = message[0]
+        payload = message[1]
+        try:
+            sensor_data = json.loads(payload)
+            address = sensor_data["Address"]
+            if address in self.sensors:
+                stored_nonce = self.sensors[address].nonce
+                received_nonce = int(sensor_data["Nonce"].replace(" ", ""),16)
+                last_seen = sensor_data["Localtime"]
+                
+                if stored_nonce == received_nonce:
+                    if DEBUG:
+                        header("Processing MQTT Message", address, self.sensors)
+                        debug("Duplicate packet, ignoring.", address)
+                if received_nonce > stored_nonce:
+                    header("Processing MQTT Message", address, self.sensors)
+                    debug("Updating stored nonce to: " + hex(received_nonce), address)
+                    self.sensors[address].nonce = received_nonce
+                    debug("Updating last seen to: " + last_seen, address)
+                    self.sensors[address].last_seen = last_seen
+
+                if DEBUG: debug("Stored Nonce: " + hex(stored_nonce),address)    
+                if DEBUG: debug("Received Nonce: " + hex(received_nonce), address)
+            
+        except:
+            debug("Error processing message from " + topic)
 
 
 
 #--------------------------------------------------
 # Main loop controls
 #--------------------------------------------------
-def process_message(message):
-    topic = message[0]
-    payload = message[1]
-    try:
-        sensor_data = json.loads(payload)
-        address = sensor_data["Address"]
-        if address in TB_SENSORS:
-            stored_nonce = TB_SENSORS[address].nonce
-            received_nonce = int(sensor_data["Nonce"].replace(" ", ""),16)
-            last_seen = sensor_data["Localtime"]
-            
-            if stored_nonce == received_nonce:
-                if DEBUG:
-                    header("Processing MQTT Message", address, TB_SENSORS)
-                    debug("Duplicate packet, ignoring.", address)
-            if received_nonce > stored_nonce:
-                header("Processing MQTT Message", address, TB_SENSORS)
-                debug("Updating stored nonce to: " + hex(received_nonce), address)
-                TB_SENSORS[address].nonce = received_nonce
-                debug("Updating last seen to: " + last_seen, address)
-                TB_SENSORS[address].last_seen = last_seen
-
-            if DEBUG: debug("Stored Nonce: " + hex(stored_nonce),address)    
-            if DEBUG: debug("Received Nonce: " + hex(received_nonce), address)
-        
-    except:
-        debug("Error processing message from " + topic)
-
 
 # Returns nice uptime string
 def seconds_to_time(seconds):
@@ -198,95 +225,124 @@ def toSigned16(n):
     return n | (-(n & 0x8000))
 
 
-def counter(n):
-    return n
-
-
-def stripAddress(addr):
-    table = str.maketrans('','',':')
-    return addr.translate(table)
-
-
-def scan_ble_devices(secs):
+def scan_ble_devices(mqtt_client, sensors, secs):
     scanner = Scanner(0)
     devices = scanner.scan(secs, passive=True)
     for device in devices:
         scanData = device.getScanData()
         for (_, _, value) in scanData:
-            address = str(device.addr)
-            valueString = str(value)
+            process_beacon(mqtt_client, sensors, device, value)
 
-            # Plaintext beacon
-            if valueString[0:4] == "aa55":
-                print("")
-                print("Plaintext beacon")
-                print("addr: " + str(device.addr))
-                print(valueString)
-              #  processPayload(valueString[4:32])
+def process_beacon(mqtt_client, sensors, device, data):
+    
+    address = str(device.addr)
+    valueString = str(data)
+    beaconId = valueString[0:4]
+    encrypted = False
+    packetVersion = 0
 
-            # Encrypted beacon
-            if valueString[0:4] == ENCRYPTED_BEACON_ID:
-                try:
-                    location = TB_SENSORS[address].name
-                except:
-                    debug("",address)
-                    debug("Found Encrypted Beacon ID", address)
-                    debug("Unknown node, please register", address)
-                    debug("",address)
-                    break
+    if beaconId == PLAINTEXT_BEACON_ID:
+        encrypted = False
+        packetVersion = 1
+    elif beaconId == ENCRYPTED_BEACON_ID:
+        encrypted = True
+        packetVersion = 1
+    elif beaconId == PLAINTEXT_BEACON_ID_V2:
+        encrypted = False
+        packetVersion = 2
+    elif beaconId == ENCRYPTED_BEACON_ID_V2:
+        encrypted = True
+        packetVersion = 2
+    else:
+        # Ignore random beacons
+        return
 
-                sensorData = {}
-                sensorData["Label"] = location
-                sensorData["Address"] = address
+    # Plaintext beacon
+    if not encrypted:
+        print("")
+        print("Plaintext beacon")
+        print("addr: " + str(device.addr))
+        print(valueString)
+        # Ignore unencrypted data in production
+        #  processPayload(valueString[4:32], packetVersion)
+        return
 
-                addrhash = hashlib.sha256(bytes.fromhex(stripAddress(str(device.addr)))).hexdigest()[0:24]
-                nonce = (int(addrhash, 16) << 32) + int(valueString[36:44], 16)
-                rebootCount = int(valueString[36:44], 16) >> 22
-                packetCount = nonce & 0x3FFFFF
+    # Encrypted beacon
+    try:
+        location = sensors[address].name
+    except:
+        debug("",address)
+        debug("Found Encrypted Beacon ID", address)
+        debug("Unknown node, please register", address)
+        debug("",address)
+        return
 
-                if ( nonce < TB_SENSORS[address].nonce):
-                    header("Found Encrypted Beacon", address, TB_SENSORS)
-                    debug("Nonce value too low, ignoring", address)
-                    debug("Received nonce: " + str(hex(nonce)), address)
-                    debug("Stored nonce: " + str(hex(TB_SENSORS[address].nonce)), address)
-                elif ( nonce == TB_SENSORS[address].nonce):
-                    if DEBUG: debug("Duplicate packet, ignoring.", address)
-                else:
-                    header("Received Encrypted Beacon", address, TB_SENSORS)
-                    debug("Location: " + location, address)
-                    debug("RSSI: {}".format(device.rssi), address)
-                    if DEBUG: debug("Payload " + valueString, address)
-                    debug("Reboot count: " + str(rebootCount), address)
-                    debug("Packet counter: " + str(packetCount), address)
-                    sensorData["Reboot count"] = rebootCount
-                    sensorData["Packet count"] = packetCount
-                    sensorData["RSSI"] = device.rssi
+    sensorData = {}
+    sensorData["Label"] = location
+    sensorData["Address"] = address
 
-                    ctr = Counter.new(128, initial_value=nonce)
-                    aes = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
-                    cipherPayload = bytes.fromhex(valueString[4:36])
-                    plainPayload = str(aes.decrypt(cipherPayload).hex())
-                    if DEBUG:
-                        debug("Nonce: " + str(hex(nonce)), address)
-                        debug("Cipher payload: " + str(cipherPayload.hex()), address)
-                        debug("Plain payload: " + plainPayload, address)
-                    if plainPayload[24:32] == MAGIC_BYTES:
-                        current_time = strftime(TIME_FORMAT, localtime())
-                        TB_SENSORS[address].nonce = nonce
-                        TB_SENSORS[address].last_seen = current_time
-                     
-                        process_payload(plainPayload, sensorData, address)
-                     
-                        sensorData["Nonce"] = hex(nonce)[0:26] + " " + hex(nonce)[26:34]
-                        sensorData["Localtime"] = current_time
-                        sensorData["Gateway"] = HOSTNAME
 
-                        client.publish(TB_SENSORS[address].topic + NODE_TOPIC,
-                                        json.dumps(sensorData), 
-                                        retain = True)
-                    else:
-                        debug("Decryption failed. Ignoring.", address)
+    (nonce, rebootCount) = parseNonce(address, valueString, packetVersion)
+    packetCount = nonce & 0x3FFFFF
 
+    if ( nonce < sensors[address].nonce):
+        header("Found Encrypted Beacon", address, sensors)
+        debug("Nonce value too low, ignoring", address)
+        debug("Received nonce: " + str(hex(nonce)), address)
+        debug("Stored nonce: " + str(hex(sensors[address].nonce)), address)
+    
+    elif ( nonce == sensors[address].nonce):
+        if DEBUG:
+            debug("Duplicate packet, ignoring.", address)
+    
+    else:
+        header("Received Encrypted Beacon", address, sensors)
+        debug("Location: " + location, address)
+        debug("RSSI: {}".format(device.rssi), address)
+        if DEBUG: debug("Payload " + valueString, address)
+        debug("Reboot count: " + str(rebootCount), address)
+        debug("Packet counter: " + str(packetCount), address)
+        sensorData["Reboot count"] = rebootCount
+        sensorData["Packet count"] = packetCount
+        sensorData["RSSI"] = device.rssi
+
+        ctr = Counter.new(128, initial_value=nonce)
+        aes = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
+        cipherPayload = bytes.fromhex(valueString[4:36])
+        plainPayload = str(aes.decrypt(cipherPayload).hex())
+        
+        if DEBUG:
+            debug("Nonce: " + str(hex(nonce)), address)
+            debug("Cipher payload: " + str(cipherPayload.hex()), address)
+            debug("Plain payload: " + plainPayload, address)
+        
+        if plainPayload[24:32] != MAGIC_BYTES:
+            debug("Decryption failed. Ignoring.", address)
+            return
+
+        current_time = time.strftime(TIME_FORMAT, time.localtime())
+        sensors[address].nonce = nonce
+        sensors[address].last_seen = current_time
+        
+        process_payload(plainPayload, sensorData, address, packetVersion)
+        
+        sensorData["Nonce"] = hex(nonce)[0:26] + " " + hex(nonce)[26:34]
+        sensorData["Localtime"] = current_time
+        sensorData["Gateway"] = HOSTNAME
+
+        if mqtt_client:
+            mqtt_client.client.publish(sensors[address].topic + NODE_TOPIC,
+                                       json.dumps(sensorData), 
+                                       retain = True)
+
+def parseNonce(address, valueString, packetVersion):
+
+    address = address.replace(':', '')
+    addrhash = hashlib.sha256(bytes.fromhex(address)).hexdigest()[0:24]
+    nonce = (int(addrhash, 16) << 32) + int(valueString[36:44], 16)
+    rebootCount = int(valueString[36:44], 16) >> 22
+
+    return (nonce, rebootCount)
 
 def header(topic, address, sensor_set):
     debug("", address)
@@ -296,44 +352,39 @@ def header(topic, address, sensor_set):
     debug("Address: " + address, address)
 
 
-def process_payload(payload, sensorData, address):
-    swVersion = int(payload[22:23],16) + int(payload[23:24],16)/10
-    debug("Software Version: " + str(swVersion), address)
-    temp = round(toSigned16(int(payload[0:4], 16))/100, 2)
-    debug("Temperature: " + str(temp) + " C", address)
+def process_payload(payload, sensorData, address, packetVersion):
+
+    if packetVersion == 1:
+        swVersion = int(payload[22:23],16) + int(payload[23:24],16)/10
+        temp = round(toSigned16(int(payload[0:4], 16))/100, 2)
+        humidity = round(int(payload[4:8], 16)/100, 2)
+        voltage = round(int(payload[8:12], 16)/100, 3)
+        uptime = int(payload[12:20], 16)
+    else:
+        swVersion = int(payload[0],16) + int(payload[1],16)/10
+        humidity = round(int(payload[2:4], 16)/2, 3)
+        temp = round(toSigned16(int(payload[4:8], 16))/100, 2)
+        uptime = int(payload[8:12], 16)
+        voltage = round(int(payload[12:14], 16)/50, 2)
+        # High bit means we're counting hours instead of seconds
+        if uptime & 0x8000:
+            uptime &= 0x7FFF
+            uptime *= 3600
+
+    debug("Pkt Version:      {}".format(packetVersion), address)   
+    debug("Software Version: {}".format(swVersion), address)
+    debug("Temperature:      {} C".format(temp), address)
+    debug("Humidity:         {} %".format(humidity), address)
+    debug("Battery Voltage:  {} V".format(voltage), address)
+    debug("Uptime:           {} s".format(uptime), address)
+    debug("Uptime:           {}".format(seconds_to_time(uptime)), address)
+    
+    sensorData["Software version"] = swVersion
     sensorData["Temperature"] = temp
-    humidity = round(int(payload[4:8], 16)/100, 2)
-    debug("Humidity: " + str(humidity) + " %", address)
     sensorData["Humidity"] = humidity
-    voltage = round(int(payload[8:12], 16)/100, 3)
     sensorData["Battery Voltage"] = voltage
-    debug("Battery Voltage: " + str(voltage) + " V", address)
-    uptime = int(payload[12:20], 16)
     sensorData["Uptime seconds"] = uptime
     sensorData["Uptime"] = seconds_to_time(uptime)
-    debug("Uptime: " + str(uptime) + " s", address)
-    debug("Uptime: " + seconds_to_time(uptime), address)
-    
-    #debug("Software version: " + str(swVersion), address)
-    sensorData["Software version"] = swVersion
-
-
-def autoconfig():
-    for a in TB_SENSORS:
-        for senstype in ["Temperature", "Humidity", "Battery Voltage"]:
-    #        device = {"model": "Thunderboard Sense BLE Node",
-    #                "manufacturer": "Silicon Labs",
-    #                "identifiers": a + "-" + senstype,
-    #                "name": TB_SENSORS[a].name + " " + senstype}
-            autoconf.register_sensor(client, 
-                                     TB_SENSORS[a].topic,
-                                     TB_SENSORS[a].name + " " + senstype,
-                                     senstype.lower().replace(" ", "-"),
-                                     senstype, 
-     #                                device=device,
-     #                                unique_id=a + "-" + senstype,
-                                     expire_after=EXPIRE_AFTER)
-
 
 
 #--------------------------------------------------
@@ -342,6 +393,11 @@ def autoconfig():
 def main():
 
     CFG_FILE = os.path.join(SCRIPT_DIR, 'config.yaml')
+
+    bleDebug = False
+    if len(sys.argv) > 1 and sys.argv[1] == 'bledebug':
+        bleDebug = True
+
     try:
         with open(CFG_FILE) as f:
             cfg = yaml.safe_load(f)
@@ -350,6 +406,7 @@ def main():
         print('ERROR: Could not find config.yaml in {}'.format(SCRIPT_DIR))
         return -1
 
+    sensors = {}
     for name in cfg['sensors']:
         sensor = Sensor()
         sensor.name = name
@@ -357,29 +414,31 @@ def main():
         if not sensor.topic.endswith('/'):
             sensor.topic += '/'
         addr = cfg['sensors'][name]['addr']
-        TB_SENSORS[addr] = sensor
+        sensors[addr] = sensor
 
-    mqtt_init(cfg['mqtt'])
-    autoconfig()
+    if bleDebug:
+        mqtt_client = None
+    else:
+        mqtt_client = Mqtt(cfg['mqtt'], sensors)
 
-    # mainloop
-    while True:
-        # First, make sure we are connected
-        while not client.connected_flag: #wait in loop
-            sleep(1)
+    try:
+        # mainloop
+        while True:
+            # First, make sure we are connected
+            if mqtt_client:
+                while not mqtt_client.connected_flag: #wait in loop
+                    time.sleep(1)
 
-        # Process any waiting messages
-        while not q.empty():
-            message = q.get()
-            process_message(message)
+                # Process any waiting messages
+                mqtt_client.process_messages()
 
-        if DEBUG: debug("Scanning for TB beacons...")
-        scan_ble_devices(4)
+            if DEBUG: debug("Scanning for TB beacons...")
+            scan_ble_devices(mqtt_client, sensors, 10)
 
-
-    # Should never end here, but if so, close nicely
-    client.loop_stop()    #Stop loop
-    client.disconnect() # disconnect
+    except KeyboardInterrupt:
+        if mqtt_client:
+            mqtt_client.client.loop_stop()    #Stop loop
+            mqtt_client.client.disconnect() # disconnect
 
 
 

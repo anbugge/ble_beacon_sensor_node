@@ -21,16 +21,18 @@
 #
 
 # Legacy reset count. Now only used to initialize counter in NVM3.
-#RESET_COUNT        : 0xFFFFFFFF
+#RESET_COUNT          : 0xFFFFFFFF
 
 # Sensor enable flags. Only RH/Temp supported currently.
-FEATURE_RH_TEMP    : 0x1
-FEATURE_HALL       : 0x0
-FEATURE_ALS        : 0x0
+FEATURE_RH_TEMP      : 0x1
+FEATURE_HALL         : 0x0
+FEATURE_ALS          : 0x0
+FEATURE_BUTTONS      : 0x0
 
-# Wake up every TIME_BASE milliseconds
-# 30 s -> 30000 = 0x7530
-SENSING_TIME_BASE  : 0x7530
+# Wake up every TIME_BASE seconds
+# 30 s -> = 0x1E
+RH_SENSING_TIME_BASE : 0x1E
+ALS_SENSING_TIME_BASE: 0xFFFFFFFF
 
 # Millidegrees temperature diff required to trigger an update
 # 0.1 C -> 100 = 0x64
@@ -40,5 +42,11 @@ TEMP_DIFF_THRESHOLD: 0x64
 # 0.5 % -> 50 = 0x32
 RH_DIFF_THRESHOLD  : 0x32
 
-AES_KEY            : FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+HALL_THRESHOLD       : 0xFFFFFFFF
+
+# 0.1 * x dBm diff required to trigger an update
+# 10 dBm % -> 100 = 0x64
+TX_POWER             : 0x64
+
+AES_KEY              : FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 

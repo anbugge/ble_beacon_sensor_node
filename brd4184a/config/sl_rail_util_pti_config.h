@@ -31,7 +31,7 @@
 #ifndef SL_RAIL_UTIL_PTI_CONFIG_H
 #define SL_RAIL_UTIL_PTI_CONFIG_H
 
-#include "rail_chip_specific.h"
+#include "rail_types.h"
 
 // <<< Use Configuration Wizard in Context Menu >>>
 // <h> PTI Configuration
@@ -45,7 +45,7 @@
 #define SL_RAIL_UTIL_PTI_MODE           RAIL_PTI_MODE_UART
 
 // <o SL_RAIL_UTIL_PTI_BAUD_RATE_HZ> PTI Baud Rate (Hertz)
-// <0-4294967295:1>
+// <147800-20000000:1>
 // <i> Default: 1600000
 #define SL_RAIL_UTIL_PTI_BAUD_RATE_HZ   1600000
 
@@ -64,6 +64,7 @@
 // PTI DFRAME on PC05
 #define SL_RAIL_UTIL_PTI_DFRAME_PORT             gpioPortC
 #define SL_RAIL_UTIL_PTI_DFRAME_PIN              5
+
 
 // [PTI_SL_RAIL_UTIL_PTI]$
 

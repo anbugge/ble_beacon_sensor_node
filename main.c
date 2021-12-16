@@ -15,9 +15,9 @@
  *
  ******************************************************************************/
 #include "sl_component_catalog.h"
-#include "sl_system_init.h"
 #include "app.h"
 #include "sl_power_manager.h"
+#include "sl_system_init.h"
 #include "sl_system_process_action.h"
 
 int main(void)

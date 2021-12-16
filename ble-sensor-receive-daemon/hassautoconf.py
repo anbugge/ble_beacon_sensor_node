@@ -27,6 +27,7 @@ def register_sensor(client,
     config["json_attributes_topic"] = sensor_topic_base + delimiter + "sensor"
     config["value_template"] = "{{ value_json['" + key + "'] }}"
     config["expire_after"] = expire_after
+    config["state_class"] = 'measurement'
 
     if device != None:
         if unique_id == None:
@@ -49,22 +50,27 @@ def register_sensor(client,
     if sensor_type == "power":
         config["unit_of_measurement"] = "W"
         config["icon"] = "mdi:power-plug"
+        config["device_class"] = "power"
     elif sensor_type == "heat":
         config["unit_of_measurement"] = "W"
         config["icon"] = "mdi:radiator"
+        config["device_class"] = "power"
     elif sensor_type == "energy" :
         config["unit_of_measurement"] = "kWh"
         config["icon"] = "mdi:flash"
+        config["device_class"] = "energy"
     elif sensor_type == "voltage":
         config["unit_of_measurement"] = "V"
         config["icon"] = "mdi:power-plug"
+        config["device_class"] = "voltage"
     elif sensor_type == "battery-voltage":
         config["unit_of_measurement"] = "V"
-        config["device_class"] = "battery"
+        config["device_class"] = "voltage"
         config["icon"] = "mdi:battery"
     elif sensor_type == "current":
         config["unit_of_measurement"] = "A"
         config["icon"] = "mdi:power-plug"
+        config["device_class"] = "current"
     elif sensor_type == "flow":
         config["unit_of_measurement"] = "L/min"
         config["icon"] = "mdi:pipe"

@@ -9,15 +9,12 @@
 #include "app_assert.h"
 #include "sl_sleeptimer.h"
 #include "sl_board_control.h"
-// #include "sl_i2cspm_instances.h"
+#include "sl_i2cspm_instances.h"
 #include "sl_si70xx.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-// HACKS
-static sl_i2cspm_t *sl_i2cspm_sensor;
 
 #if DEBUG_OUT
 #define dbg_printf(...) printf(__VA_ARGS__)
@@ -30,8 +27,8 @@ static float tempDiffThreshold;
 /* Send packet if humidity has changed more than this (percent) */
 static float humDiffThreshold;
 
-static int32_t  lastTemperature = 0x8000;
-static int32_t  lastRelativeHumidity = 0x8000;
+static float  lastTemperature      = 1e6;
+static float  lastRelativeHumidity = 1e6;
 
 static sl_sleeptimer_timer_handle_t delayTimer;
 
@@ -40,13 +37,27 @@ static void readMeasurement (sl_sleeptimer_timer_handle_t *handle, void *data);
 
 bool rhtemp_init(void)
 {
+  sl_status_t sc;
+  uint32_t timeBase;
+
   sl_board_enable_sensor(SL_BOARD_SENSOR_RHT);
-  sl_si70xx_init(sl_i2cspm_sensor, SI7021_ADDR);
+  sc = sl_si70xx_init(sl_i2cspm_sensor, SI7021_ADDR);
   sl_board_disable_sensor(SL_BOARD_SENSOR_RHT);
+  if ( sc != SL_STATUS_OK ) {
+    dbg_printf("SI7021 init failed, return value: 0x%lx\r\n", sc);
+    return false;
+  }
 
   getTokenFloat(TEMP_DIFF_THRESHOLD_ADDR, &tempDiffThreshold, 100, 0.5f);
   getTokenFloat(RH_DIFF_THRESHOLD_ADDR, &humDiffThreshold, 10, 1.0f);
-  // getTokenU32()
+  if (!getTokenU32(RH_SENSING_TIME_BASE_ADDR, &timeBase)){
+    timeBase = 30;
+  }
+  dbg_printf("Temperature diff threshold: %0.2f C\r\n", tempDiffThreshold);
+  dbg_printf("RH diff threshold: %0.2f %%\r\n", humDiffThreshold);
+  dbg_printf("RHT time base: %lu s\r\n", timeBase);
+
+  app_enableSensor(RhTempSensor, timeBase);
 
   return true;
 }
@@ -94,6 +105,8 @@ static void readMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data)
   
   int32_t temperature;
   int32_t relativeHumidity;
+  float temperatureF;
+  float relativeHumidityF;
 
   sl_status_t sc;
 
@@ -107,17 +120,34 @@ static void readMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data)
     return;
   }
 
-  // Send if a value has changed significantly
-  if ( abs(temperature - lastTemperature) > 100 * tempDiffThreshold || abs(relativeHumidity - lastRelativeHumidity) > 10 * humDiffThreshold){
-    sending = true;
-  }
-  lastTemperature = temperature;
-  lastRelativeHumidity = relativeHumidity;
+  temperatureF = temperature / 1000.0f;
+  relativeHumidityF = relativeHumidity / 1000.0f;
 
-  temperature = (temperature + 5) / 10;
-  relativeHumidity = (relativeHumidity + 5) / 10;
-  if ( relativeHumidity > 10000 ){
-    relativeHumidity = 10000;
+  // Send if a value has changed significantly
+  if (
+     abs( temperatureF      - lastTemperature )      > tempDiffThreshold ||
+     abs( relativeHumidityF - lastRelativeHumidity ) > humDiffThreshold
+     ) {
+    sending = true;
+    lastTemperature      = temperatureF;
+    lastRelativeHumidity = relativeHumidityF;
+  }
+
+  if ( relativeHumidityF > 100 ){
+    relativeHumidityF = 100;
+  }
+  else if ( relativeHumidityF < 0){
+    relativeHumidityF = 0; 
+  }
+
+  temperature      = temperatureF * 100;
+  relativeHumidity = relativeHumidityF * 2;
+  // Make sure temperature fits in int16
+  if ( temperature > INT16_MAX ){
+    temperature = INT16_MAX;
+  }
+  else if ( temperature < INT16_MIN ){
+    temperature = INT16_MIN;
   }
 
   app_registerMeasurement(TemperatureMeasurement, temperature, false);
