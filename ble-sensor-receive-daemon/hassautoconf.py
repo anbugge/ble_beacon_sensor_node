@@ -35,6 +35,8 @@ def register_sensor(client,
         else:
             config["unique_id"] = unique_id
 
+        config["object_id"] = config["unique_id"]
+        
         device = dict(device)
         if "identifiers" not in device:
             device["identifiers"] = config["unique_id"]

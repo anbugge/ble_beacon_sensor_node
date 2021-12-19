@@ -1,10 +1,12 @@
 sensors:
   Sauna:
-    addr: '00:0b:57:31:59:de'
+    addr: 90:fd:9f:00:00:00
     topic: tb/sauna
+    type: tbs2
   Matbod:
-    addr: '14:b4:57:0b:09:56'
+    addr: 14:b4:57:00:00:00
     topic: tb/matbod
+    type: tbbg22
 
 mqtt:
   broker: '192.168.86.100'

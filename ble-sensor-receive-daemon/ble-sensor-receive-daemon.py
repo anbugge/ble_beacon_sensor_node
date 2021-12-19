@@ -48,6 +48,7 @@ NODE_TOPIC = "sensor"
 class Sensor:
     name = ''
     topic = ''
+    type = None
     nonce = 0
     last_seen = "2000-01-01 00:00:00"
     availability = ''
@@ -68,7 +69,6 @@ def debug(text, address=""):
         print(line)
     logfile.write(line + "\n")
     logfile.close()
-
 
 
 #--------------------------------------------------
@@ -153,17 +153,22 @@ class Mqtt:
     def autoconfig(self):
         for (addr, s) in self.sensors.items():
             for senstype in ["Temperature", "Humidity", "Battery Voltage"]:
-        #        device = {"model": "Thunderboard Sense BLE Node",
-        #                "manufacturer": "Silicon Labs",
-        #                "identifiers": addr + "-" + senstype,
-        #                "name": self.sensors[a].name + " " + senstype}
-                autoconf.register_sensor(self.client, 
-                                        s.topic,
-                                        s.name + " " + senstype,
-                                        senstype.lower().replace(" ", "-"),
-                                        senstype, 
-        #                                device=device,
-        #                                unique_id=addr + "-" + senstype,
+                senstype_id = senstype.lower().replace(" ", "-")
+                device = {"manufacturer": "Silicon Labs",
+                          "identifiers": addr,
+                          "name": s.name
+                          }
+                if s.type == 'tbs2':
+                    device["model"] = "Thunderboard Sense 2 BLE Node"
+                elif s.type == 'tbbg22':
+                    device["model"] = "Thunderboard BG22 BLE Node"
+                autoconf.register_sensor(client=self.client, 
+                                        sensor_topic_base=s.topic,
+                                        title=s.name + " " + senstype,
+                                        sensor_type=senstype_id,
+                                        key=senstype, 
+                                        device=device,
+                                        unique_id=addr + "_" + senstype_id,
                                         expire_after=EXPIRE_AFTER)
 
     def process_messages(self):
@@ -407,13 +412,17 @@ def main():
         return -1
 
     sensors = {}
-    for name in cfg['sensors']:
+    for name, c in cfg['sensors'].items():
         sensor = Sensor()
         sensor.name = name
-        sensor.topic = cfg['sensors'][name]['topic'].strip()
+        sensor.topic = c['topic'].strip()
         if not sensor.topic.endswith('/'):
             sensor.topic += '/'
-        addr = cfg['sensors'][name]['addr']
+        addr = c['addr']
+        try:
+            sensor.type = c['type']
+        except KeyError:
+            sensor.type = None
         sensors[addr] = sensor
 
     if bleDebug:
