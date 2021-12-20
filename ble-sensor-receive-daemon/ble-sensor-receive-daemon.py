@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
-from bluepy.btle import Scanner
+import threading
+from bluepy import btle
 from datetime import datetime, timedelta
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
@@ -205,149 +206,231 @@ class Mqtt:
             debug("Error processing message from " + topic)
 
 
-
 #--------------------------------------------------
-# Main loop controls
+# BLE Scanner
 #--------------------------------------------------
+class BleScanner():
+    def __init__(self, q) -> None:
+        self.poll_secs = 5
+        self.q = q
+        self.scanner = btle.Scanner().withDelegate(ScanDelegate(self.q))
 
-# Returns nice uptime string
-def seconds_to_time(seconds):
-    s = timedelta(seconds=int(seconds))
-    d = datetime(1,1,1) + s
-    nice_string = ""
-    if   d.year == 2:   nice_string += "1 Year, "
-    elif d.year  > 2: nice_string += str(d.year-1) + " Years, "
-    if   d.month == 2: nice_string += "1 Month, "
-    elif d.month  > 2: nice_string += str(d.month-1) + " Months, "
-    if   d.day == 2: nice_string += "1 Day, " 
-    elif d.day  > 2: nice_string += str(d.day-1) + " Days, "
-    nice_string += '{}:{}:{}'.format(d.hour, d.minute, d.second)
-    return nice_string
-
-
-def toSigned16(n):
-    n = n & 0xffff
-    return n | (-(n & 0x8000))
-
-
-def scan_ble_devices(mqtt_client, sensors, secs):
-    scanner = Scanner(0)
-    devices = scanner.scan(secs, passive=True)
-    for device in devices:
-        scanData = device.getScanData()
-        for (_, _, value) in scanData:
-            process_beacon(mqtt_client, sensors, device, value)
-
-def process_beacon(mqtt_client, sensors, device, data):
-    
-    address = str(device.addr)
-    valueString = str(data)
-    beaconId = valueString[0:4]
-    encrypted = False
-    packetVersion = 0
-
-    if beaconId == PLAINTEXT_BEACON_ID:
-        encrypted = False
-        packetVersion = 1
-    elif beaconId == ENCRYPTED_BEACON_ID:
-        encrypted = True
-        packetVersion = 1
-    elif beaconId == PLAINTEXT_BEACON_ID_V2:
-        encrypted = False
-        packetVersion = 2
-    elif beaconId == ENCRYPTED_BEACON_ID_V2:
-        encrypted = True
-        packetVersion = 2
-    else:
-        # Ignore random beacons
-        return
-
-    # Plaintext beacon
-    if not encrypted:
-        print("")
-        print("Plaintext beacon")
-        print("addr: " + str(device.addr))
-        print(valueString)
-        # Ignore unencrypted data in production
-        #  processPayload(valueString[4:32], packetVersion)
-        return
-
-    # Encrypted beacon
-    try:
-        location = sensors[address].name
-    except:
-        debug("",address)
-        debug("Found Encrypted Beacon ID", address)
-        debug("Unknown node, please register", address)
-        debug("",address)
-        return
-
-    sensorData = {}
-    sensorData["Label"] = location
-    sensorData["Address"] = address
-
-
-    (nonce, rebootCount) = parseNonce(address, valueString, packetVersion)
-    packetCount = nonce & 0x3FFFFF
-
-    if ( nonce < sensors[address].nonce):
-        header("Found Encrypted Beacon", address, sensors)
-        debug("Nonce value too low, ignoring", address)
-        debug("Received nonce: " + str(hex(nonce)), address)
-        debug("Stored nonce: " + str(hex(sensors[address].nonce)), address)
-    
-    elif ( nonce == sensors[address].nonce):
+    def start_polling(self):
         if DEBUG:
-            debug("Duplicate packet, ignoring.", address)
-    
-    else:
-        header("Received Encrypted Beacon", address, sensors)
-        debug("Location: " + location, address)
-        debug("RSSI: {}".format(device.rssi), address)
-        if DEBUG: debug("Payload " + valueString, address)
-        debug("Reboot count: " + str(rebootCount), address)
-        debug("Packet counter: " + str(packetCount), address)
-        sensorData["Reboot count"] = rebootCount
-        sensorData["Packet count"] = packetCount
-        sensorData["RSSI"] = device.rssi
+            debug("BLE: Start polling")
+        self.poll_thread = threading.Thread(target=self.__scan_loop)
+        self.running = True
+        self.poll_thread.start()
 
-        ctr = Counter.new(128, initial_value=nonce)
-        aes = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
-        cipherPayload = bytes.fromhex(valueString[4:36])
-        plainPayload = str(aes.decrypt(cipherPayload).hex())
-        
+    def stop_polling(self):
         if DEBUG:
-            debug("Nonce: " + str(hex(nonce)), address)
-            debug("Cipher payload: " + str(cipherPayload.hex()), address)
-            debug("Plain payload: " + plainPayload, address)
+            debug("BLE: Stop polling")
+        self.running = False
+        self.poll_thread.join(timeout=self.poll_secs + 1)
+
+    def __scan_loop(self):
+        self.scanner.clear()
+        self.scanner.start(passive=True)
         
-        if plainPayload[24:32] != MAGIC_BYTES:
-            debug("Decryption failed. Ignoring.", address)
+        while self.running:
+            if DEBUG:
+                debug("BLE: Scan...")
+            self.scanner.process(self.poll_secs)
+        
+        self.scanner.stop()
+
+class ScanDelegate(btle.DefaultDelegate):
+    def __init__(self, q):
+        self.q = q
+        super().__init__()
+
+    def handleDiscovery(self, dev, isNewDev, isNewData):
+        if isNewDev or isNewData:
+            if DEBUG and str(dev.addr).startswith(('90:', '14:b4')):
+                debug("ADV: {} {}".format(isNewDev, isNewData), dev.addr)
+            self.q.put(dev)
+
+class BleBeacons():
+
+    def __init__(self, q, mqtt_client, sensors) -> None:
+        self.poll_secs = 5
+        self.mqtt_client = mqtt_client
+        self.sensors = sensors
+        self.q = q
+
+    def process_beacons(self):
+        while not self.q.empty():
+            device = self.q.get()
+            scanData = device.getScanData()
+            for (_, _, value) in scanData:
+                self.__process_beacon(self.mqtt_client, self.sensors, device, value)
+
+    def __process_beacon(self, mqtt_client, sensors, device, data):
+        
+        address = str(device.addr)
+        valueString = str(data)
+        beaconId = valueString[0:4]
+        encrypted = False
+        packetVersion = 0
+
+        if beaconId == PLAINTEXT_BEACON_ID:
+            encrypted = False
+            packetVersion = 1
+        elif beaconId == ENCRYPTED_BEACON_ID:
+            encrypted = True
+            packetVersion = 1
+        elif beaconId == PLAINTEXT_BEACON_ID_V2:
+            encrypted = False
+            packetVersion = 2
+        elif beaconId == ENCRYPTED_BEACON_ID_V2:
+            encrypted = True
+            packetVersion = 2
+        else:
+            # Ignore random beacons
             return
 
-        current_time = time.strftime(TIME_FORMAT, time.localtime())
-        sensors[address].nonce = nonce
-        sensors[address].last_seen = current_time
+        # Plaintext beacon
+        if not encrypted:
+            print("")
+            print("Plaintext beacon")
+            print("addr: " + str(device.addr))
+            print(valueString)
+            # Ignore unencrypted data in production
+            #  processPayload(valueString[4:32], packetVersion)
+            return
+
+        # Encrypted beacon
+        try:
+            location = sensors[address].name
+        except:
+            debug("",address)
+            debug("Found Encrypted Beacon ID", address)
+            debug("Unknown node, please register", address)
+            debug("",address)
+            return
+
+        sensorData = {}
+        sensorData["Label"] = location
+        sensorData["Address"] = address
+
+
+        (nonce, rebootCount) = self.__parseNonce(address, valueString, packetVersion)
+        packetCount = nonce & 0x3FFFFF
+
+        if ( nonce < sensors[address].nonce):
+            header("Found Encrypted Beacon", address, sensors)
+            debug("Nonce value too low, ignoring", address)
+            debug("Received nonce: " + str(hex(nonce)), address)
+            debug("Stored nonce: " + str(hex(sensors[address].nonce)), address)
         
-        process_payload(plainPayload, sensorData, address, packetVersion)
+        elif ( nonce == sensors[address].nonce):
+            if DEBUG:
+                debug("Duplicate packet, ignoring.", address)
         
-        sensorData["Nonce"] = hex(nonce)[0:26] + " " + hex(nonce)[26:34]
-        sensorData["Localtime"] = current_time
-        sensorData["Gateway"] = HOSTNAME
+        else:
+            header("Received Encrypted Beacon", address, sensors)
+            debug("Location: " + location, address)
+            debug("RSSI: {}".format(device.rssi), address)
+            if DEBUG: debug("Payload " + valueString, address)
+            debug("Reboot count: " + str(rebootCount), address)
+            debug("Packet counter: " + str(packetCount), address)
+            sensorData["Reboot count"] = rebootCount
+            sensorData["Packet count"] = packetCount
+            sensorData["RSSI"] = device.rssi
 
-        if mqtt_client:
-            mqtt_client.client.publish(sensors[address].topic + NODE_TOPIC,
-                                       json.dumps(sensorData), 
-                                       retain = True)
+            ctr = Counter.new(128, initial_value=nonce)
+            aes = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
+            cipherPayload = bytes.fromhex(valueString[4:36])
+            plainPayload = str(aes.decrypt(cipherPayload).hex())
+            
+            if DEBUG:
+                debug("Nonce: " + str(hex(nonce)), address)
+                debug("Cipher payload: " + str(cipherPayload.hex()), address)
+                debug("Plain payload: " + plainPayload, address)
+            
+            if plainPayload[24:32] != MAGIC_BYTES:
+                debug("Decryption failed. Ignoring.", address)
+                return
 
-def parseNonce(address, valueString, packetVersion):
+            current_time = time.strftime(TIME_FORMAT, time.localtime())
+            sensors[address].nonce = nonce
+            sensors[address].last_seen = current_time
+            
+            self.__process_payload(plainPayload, sensorData, address, packetVersion)
+            
+            sensorData["Nonce"] = hex(nonce)[0:26] + " " + hex(nonce)[26:34]
+            sensorData["Localtime"] = current_time
+            sensorData["Gateway"] = HOSTNAME
 
-    address = address.replace(':', '')
-    addrhash = hashlib.sha256(bytes.fromhex(address)).hexdigest()[0:24]
-    nonce = (int(addrhash, 16) << 32) + int(valueString[36:44], 16)
-    rebootCount = int(valueString[36:44], 16) >> 22
+            if mqtt_client:
+                mqtt_client.client.publish(sensors[address].topic + NODE_TOPIC,
+                                        json.dumps(sensorData), 
+                                        retain = True)
 
-    return (nonce, rebootCount)
+    def __process_payload(self, payload, sensorData, address, packetVersion):
+
+        if packetVersion == 1:
+            swVersion = int(payload[22:23],16) + int(payload[23:24],16)/10
+            temp = round(self.__toSigned16(int(payload[0:4], 16))/100, 2)
+            humidity = round(int(payload[4:8], 16)/100, 2)
+            voltage = round(int(payload[8:12], 16)/100, 3)
+            uptime = int(payload[12:20], 16)
+        else:
+            swVersion = int(payload[0],16) + int(payload[1],16)/10
+            humidity = round(int(payload[2:4], 16)/2, 3)
+            temp = round(self.__toSigned16(int(payload[4:8], 16))/100, 2)
+            uptime = int(payload[8:12], 16)
+            voltage = round(int(payload[12:14], 16)/50, 2)
+            # High bit means we're counting hours instead of seconds
+            if uptime & 0x8000:
+                uptime &= 0x7FFF
+                uptime *= 3600
+
+        debug("Pkt Version:      {}".format(packetVersion), address)   
+        debug("Software Version: {}".format(swVersion), address)
+        debug("Temperature:      {} C".format(temp), address)
+        debug("Humidity:         {} %".format(humidity), address)
+        debug("Battery Voltage:  {} V".format(voltage), address)
+        debug("Uptime:           {} s".format(uptime), address)
+        debug("Uptime:           {}".format(self.__seconds_to_time(uptime)), address)
+        
+        sensorData["Software version"] = swVersion
+        sensorData["Temperature"] = temp
+        sensorData["Humidity"] = humidity
+        sensorData["Battery Voltage"] = voltage
+        sensorData["Uptime seconds"] = uptime
+        sensorData["Uptime"] = self.__seconds_to_time(uptime)
+
+    @staticmethod
+    def __parseNonce(address, valueString, packetVersion):
+
+        address = address.replace(':', '')
+        addrhash = hashlib.sha256(bytes.fromhex(address)).hexdigest()[0:24]
+        nonce = (int(addrhash, 16) << 32) + int(valueString[36:44], 16)
+        rebootCount = int(valueString[36:44], 16) >> 22
+
+        return (nonce, rebootCount)
+
+
+    # Returns nice uptime string
+    @staticmethod
+    def __seconds_to_time(seconds):
+        s = timedelta(seconds=int(seconds))
+        d = datetime(1,1,1) + s
+        nice_string = ""
+        if   d.year == 2:   nice_string += "1 Year, "
+        elif d.year  > 2: nice_string += str(d.year-1) + " Years, "
+        if   d.month == 2: nice_string += "1 Month, "
+        elif d.month  > 2: nice_string += str(d.month-1) + " Months, "
+        if   d.day == 2: nice_string += "1 Day, " 
+        elif d.day  > 2: nice_string += str(d.day-1) + " Days, "
+        nice_string += '{}:{}:{}'.format(d.hour, d.minute, d.second)
+        return nice_string
+
+    @staticmethod
+    def __toSigned16(n):
+        n = n & 0xffff
+        return n | (-(n & 0x8000))
 
 def header(topic, address, sensor_set):
     debug("", address)
@@ -355,41 +438,6 @@ def header(topic, address, sensor_set):
     debug(topic + ": " + sensor_set[address].name, address)
     debug("-----------------------------------------------------------", address)
     debug("Address: " + address, address)
-
-
-def process_payload(payload, sensorData, address, packetVersion):
-
-    if packetVersion == 1:
-        swVersion = int(payload[22:23],16) + int(payload[23:24],16)/10
-        temp = round(toSigned16(int(payload[0:4], 16))/100, 2)
-        humidity = round(int(payload[4:8], 16)/100, 2)
-        voltage = round(int(payload[8:12], 16)/100, 3)
-        uptime = int(payload[12:20], 16)
-    else:
-        swVersion = int(payload[0],16) + int(payload[1],16)/10
-        humidity = round(int(payload[2:4], 16)/2, 3)
-        temp = round(toSigned16(int(payload[4:8], 16))/100, 2)
-        uptime = int(payload[8:12], 16)
-        voltage = round(int(payload[12:14], 16)/50, 2)
-        # High bit means we're counting hours instead of seconds
-        if uptime & 0x8000:
-            uptime &= 0x7FFF
-            uptime *= 3600
-
-    debug("Pkt Version:      {}".format(packetVersion), address)   
-    debug("Software Version: {}".format(swVersion), address)
-    debug("Temperature:      {} C".format(temp), address)
-    debug("Humidity:         {} %".format(humidity), address)
-    debug("Battery Voltage:  {} V".format(voltage), address)
-    debug("Uptime:           {} s".format(uptime), address)
-    debug("Uptime:           {}".format(seconds_to_time(uptime)), address)
-    
-    sensorData["Software version"] = swVersion
-    sensorData["Temperature"] = temp
-    sensorData["Humidity"] = humidity
-    sensorData["Battery Voltage"] = voltage
-    sensorData["Uptime seconds"] = uptime
-    sensorData["Uptime"] = seconds_to_time(uptime)
 
 
 #--------------------------------------------------
@@ -430,6 +478,11 @@ def main():
     else:
         mqtt_client = Mqtt(cfg['mqtt'], sensors)
 
+    bleQueue = queue.Queue()
+    scanner = BleScanner(bleQueue)
+    beaconHandler = BleBeacons(bleQueue, mqtt_client, sensors)
+
+    scanner.start_polling()
     try:
         # mainloop
         while True:
@@ -441,13 +494,14 @@ def main():
                 # Process any waiting messages
                 mqtt_client.process_messages()
 
-            if DEBUG: debug("Scanning for TB beacons...")
-            scan_ble_devices(mqtt_client, sensors, 10)
+            beaconHandler.process_beacons()
 
     except KeyboardInterrupt:
         if mqtt_client:
             mqtt_client.client.loop_stop()    #Stop loop
             mqtt_client.client.disconnect() # disconnect
+        
+        scanner.stop_polling()
 
 
 
