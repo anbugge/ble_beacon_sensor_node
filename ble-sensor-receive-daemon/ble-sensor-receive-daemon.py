@@ -163,13 +163,13 @@ class Mqtt:
                     device["model"] = "Thunderboard Sense 2 BLE Node"
                 elif s.type == 'tbbg22':
                     device["model"] = "Thunderboard BG22 BLE Node"
-                autoconf.register_sensor(client=self.client, 
+                autoconf.register_sensor(client=self.client,
                                         sensor_topic_base=s.topic,
                                         title=s.name + " " + senstype,
                                         sensor_type=senstype_id,
-                                        key=senstype, 
+                                        key=senstype,
                                         device=device,
-                                        unique_id=addr + "_" + senstype_id,
+                                        unique_id=s.name + "_" + senstype_id,
                                         expire_after=EXPIRE_AFTER)
 
     def process_messages(self):
