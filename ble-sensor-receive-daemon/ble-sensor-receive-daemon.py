@@ -252,18 +252,25 @@ class ScanDelegate(btle.DefaultDelegate):
 
 class BleBeacons():
 
+    q: queue.Queue
+
     def __init__(self, q, mqtt_client, sensors) -> None:
-        self.poll_secs = 5
         self.mqtt_client = mqtt_client
         self.sensors = sensors
         self.q = q
 
-    def process_beacons(self):
-        while not self.q.empty():
-            device = self.q.get()
-            scanData = device.getScanData()
-            for (_, _, value) in scanData:
-                self.__process_beacon(self.mqtt_client, self.sensors, device, value)
+    def process_beacons(self, timeout=5):
+        try:
+            # Wait up to timeout seconds for the first beacon
+            device = self.q.get(block=True, timeout=timeout)
+            while True:
+                scanData = device.getScanData()
+                for (_, _, value) in scanData:
+                    self.__process_beacon(self.mqtt_client, self.sensors, device, value)
+                device = self.q.get(block=False)
+        except queue.Empty:
+            # Return on timeout or after emptying the queue
+            return
 
     def __process_beacon(self, mqtt_client, sensors, device, data):
         
@@ -494,7 +501,8 @@ def main():
                 # Process any waiting messages
                 mqtt_client.process_messages()
 
-            beaconHandler.process_beacons()
+            # Sleep until beacons are available - process them immediately
+            beaconHandler.process_beacons(timeout=5)
 
     except KeyboardInterrupt:
         if mqtt_client:
