@@ -62,15 +62,17 @@ typedef struct {
 #endif
 
 #if ENCRYPTION
-const uint8_t packetId[2] = {0xAA,0x06}; /* PacketId AA06 for V2 encrypted packet*/
-const bool encryption = true;
+static const uint8_t app_packetId[2] = {0xAA,0x06}; /* PacketId AA06 for V2 encrypted packet*/
+static const bool app_encryption = true;
 #else
-const uint8_t packetId[2] = {0xAA,0x56}; /* PacketId AA56 for V2 plaintext packet*/
-const bool encryption = false;
+static const uint8_t app_packetId[2] = {0xAA,0x56}; /* PacketId AA56 for V2 plaintext packet*/
+static const bool app_encryption = false;
 #endif
 
-const uint8_t *key = TOKEN_TO_ARRAY(AES_KEY_ADDR);
-static int txPower;
+static const uint8_t *app_aesKey = TOKEN_TO_ARRAY(AES_KEY_ADDR);
+static int     app_txPower;
+static uint8_t app_pktCount;
+static uint8_t app_pktCountEvent;
 
 // NVM3 keys
 const uint32_t RESET_COUNTER_KEY  = 0x01;
@@ -233,10 +235,10 @@ void app_registerMeasurement(MeasurementType type, uint32_t value, bool send)
 
   if ( send ){
     uint32_t uptime = sl_sleeptimer_get_time();
-    uint8_t pktCount = 1;
+    uint8_t pktCount = app_pktCount;
     if (measurementCount > 0) {
       // Assume all "extra" measurements are important - send 3 times
-      pktCount = 3;
+      pktCount = app_pktCountEvent;
     }
     lastPacketSentTime = uptime;
     setPayload();
@@ -379,7 +381,7 @@ void setPayload(void){
 
   packetCnt++;
 
-  if (encryption){
+  if (app_encryption){
     encryptPayload();
   }
   else {
@@ -390,7 +392,7 @@ void setPayload(void){
 static void encryptPayload(void){
 
   dbg_printf("Encryption key: 0x");
-  dbg_printArray(key, 16);
+  dbg_printArray(app_aesKey, 16);
 
   dbg_printf("Plaintext: 0x");
   dbg_printArray((uint8_t*)&payload, sizeof(payload));
@@ -409,7 +411,7 @@ static void encryptPayload(void){
   memset(streamBlock, 0, sizeof(streamBlock));
 
   mbedtls_aes_init(&ctx);
-  stat = mbedtls_aes_setkey_enc(&ctx, key, 128);
+  stat = mbedtls_aes_setkey_enc(&ctx, app_aesKey, 128);
   app_assert(stat == SL_STATUS_OK, "AES setkey failed");
 
   stat = mbedtls_aes_crypt_ctr(&ctx, sizeof(payload), &ncOffset, ctr, streamBlock, (uint8_t*)&payload, encPkt);
@@ -467,7 +469,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
 
       int16_t set_max_power, set_min_power;
       // Set Transmit Power.
-      sc = sl_bt_system_set_tx_power(txPower, txPower, &set_min_power, &set_max_power);
+      sc = sl_bt_system_set_tx_power(app_txPower, app_txPower, &set_min_power, &set_max_power);
       app_assert(sc == SL_STATUS_OK,
                     "[E: 0x%04x] Failed to set TX power for Bluetooth\r\n",
                     (int)sc);
@@ -560,9 +562,19 @@ bool initTokens(void){
 
   bool success = true;
 
-  if (!getTokenU32(TX_POWER_ADDR, (uint32_t*)&txPower)){
+  if (!getTokenU32(TX_POWER_ADDR, (uint32_t*)&app_txPower)){
     success = false;
-    txPower = 0;
+    app_txPower = 0;
+  }
+
+  if (!getTokenU8(PKT_COUNT_ADDR, &app_pktCount)){
+    success = false;
+    app_pktCount = 2;
+  }
+
+  if (!getTokenU8(PKT_COUNT_EVENT_ADDR, &app_pktCountEvent)){
+    success = false;
+    app_pktCountEvent = 4;
   }
 
   return success;
@@ -578,7 +590,7 @@ static void initPacket(void)
   packet.flags = 0x04 | 0x02;
   packet.mandataLen = 23;
   packet.mandataType = 0xFF;
-  memcpy(&packet.packetId, &packetId, sizeof(packet.packetId));
+  memcpy(&packet.packetId, &app_packetId, sizeof(packet.packetId));
 }
 
 static void dbg_printArray(const uint8_t* binbuf, unsigned int binbuflen)
