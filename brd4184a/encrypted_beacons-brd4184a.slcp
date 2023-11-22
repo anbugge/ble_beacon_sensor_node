@@ -22,8 +22,6 @@ include:
   file_list:
   - {path: app.h}
 - {path: ''}
-sdk: {id: gecko_sdk, version: 3.2.3}
-toolchain_settings: []
 component:
 - {id: power_manager}
 - {id: bluetooth_feature_gatt_server}
@@ -51,7 +49,6 @@ component:
 - {id: printf}
 - {id: component_catalog}
 - {id: brd4184a}
-- {id: bootloader_interface}
 - {id: app_assert}
 - {id: sensor_rht}
 - {id: EFR32BG22C224F512IM40}

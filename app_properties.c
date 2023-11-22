@@ -14,7 +14,7 @@
  *
  ******************************************************************************/
 
-#include <api/application_properties.h>
+#include "application_properties.h"
 
 #if defined(__IAR_SYSTEMS_ICC__)
 /* IAR ICC */

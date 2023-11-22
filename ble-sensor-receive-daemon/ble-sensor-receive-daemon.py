@@ -41,7 +41,7 @@ PLAINTEXT_BEACON_ID_V2 = "aa56"
 ENCRYPTED_BEACON_ID_V2 = "aa06"
 
 # Availability settings
-EXPIRE_AFTER = 4800 # Seconds since last seen is considered offline
+EXPIRE_AFTER = 7200 # Seconds since last seen is considered offline
 
 # Nodes and topics
 NODE_TOPIC = "sensor"
@@ -165,7 +165,7 @@ class Mqtt:
                     device["model"] = "Thunderboard BG22 BLE Node"
                 autoconf.register_sensor(client=self.client,
                                         sensor_topic_base=s.topic,
-                                        title=s.name + " " + senstype,
+                                        title=senstype,
                                         sensor_type=senstype_id,
                                         key=senstype,
                                         device=device,

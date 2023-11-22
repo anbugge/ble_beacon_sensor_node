@@ -1,6 +1,6 @@
 /***************************************************************************//**
  * @file
- * @brief Packet Trace Information configuration file.
+ * @brief SWO configuration
  *******************************************************************************
  * # License
  * <b>Copyright 2020 Silicon Laboratories Inc. www.silabs.com</b>
@@ -28,48 +28,72 @@
  *
  ******************************************************************************/
 
-#ifndef SL_RAIL_UTIL_PTI_CONFIG_H
-#define SL_RAIL_UTIL_PTI_CONFIG_H
-
-#include "rail_types.h"
+#ifndef SL_DEBUG_SWO_CONFIG_H
+#define SL_DEBUG_SWO_CONFIG_H
 
 // <<< Use Configuration Wizard in Context Menu >>>
-// <h> PTI Configuration
 
-// <o SL_RAIL_UTIL_PTI_MODE> PTI mode
-// <RAIL_PTI_MODE_UART=> UART
-// <RAIL_PTI_MODE_UART_ONEWIRE=> UART onewire
-// <RAIL_PTI_MODE_SPI=> SPI
-// <RAIL_PTI_MODE_DISABLED=> Disabled
-// <i> Default: RAIL_PTI_MODE_UART
-#define SL_RAIL_UTIL_PTI_MODE           RAIL_PTI_MODE_UART
+// <h>SWO Configuration
 
-// <o SL_RAIL_UTIL_PTI_BAUD_RATE_HZ> PTI Baud Rate (Hertz)
-// <147800-20000000:1>
-// <i> Default: 1600000
-#define SL_RAIL_UTIL_PTI_BAUD_RATE_HZ   1600000
+// <o SL_DEBUG_SWO_FREQ> SWO Frequency
+// <i> Must be 875 kHz for communication with Silicon Labs debuggers
+// <i> Default: 875000
+#define SL_DEBUG_SWO_FREQ                       875000
 
+// <q SL_DEBUG_SWO_SAMPLE_IRQ> Enable interrupt event trace
+// <i> Default: 0
+#define SL_DEBUG_SWO_SAMPLE_IRQ                 0
+
+// <q SL_DEBUG_SWO_SAMPLE_PC> Enable Program Counter samples
+// <i> Default: 0
+#define SL_DEBUG_SWO_SAMPLE_PC                  0
+
+// <o SL_DEBUG_SWO_SAMPLE_INTERVAL> SWO debug sample intervals
+// <64=>    64
+// <128=>   128
+// <192=>   192
+// <256=>   256
+// <320=>   320
+// <384=>   384
+// <448=>   448
+// <512=>   512
+// <576=>   576
+// <640=>   640
+// <704=>   704
+// <768=>   768
+// <832=>   832
+// <896=>   896
+// <960=>   960
+// <1024=>  1024
+// <2048=>  2048
+// <3072=>  3072
+// <4096=>  4096
+// <5102=>  5102
+// <6144=>  6144
+// <7168=>  7168
+// <8192=>  8192
+// <9216=>  9216
+// <10240=> 10240
+// <11264=> 11264
+// <12288=> 12288
+// <13312=> 13312
+// <14336=> 14336
+// <15360=> 15360
+//<i> Must be 64, 128, 192, [ n * 64 ], 1024, 2048, 3072, [ n * 1024 ] , 15360
+//<i> Default: 15360
+#define SL_DEBUG_SWO_SAMPLE_INTERVAL 15360
 // </h>
+
 // <<< end of configuration section >>>
 
 // <<< sl:start pin_tool >>>
-// <pti signal=DOUT,(DFRAME),(DCLK)> SL_RAIL_UTIL_PTI
-// $[PTI_SL_RAIL_UTIL_PTI]
-#define SL_RAIL_UTIL_PTI_PERIPHERAL              PTI
+// <gpio signal=SWV> SL_DEBUG
+// $[GPIO_SL_DEBUG]
+#define SL_DEBUG_PERIPHERAL                     GPIO
 
-// PTI DOUT on PB12
-#define SL_RAIL_UTIL_PTI_DOUT_PORT               gpioPortB
-#define SL_RAIL_UTIL_PTI_DOUT_PIN                12
-#define SL_RAIL_UTIL_PTI_DOUT_LOC                6
-
-// PTI DFRAME on PB13
-#define SL_RAIL_UTIL_PTI_DFRAME_PORT             gpioPortB
-#define SL_RAIL_UTIL_PTI_DFRAME_PIN              13
-#define SL_RAIL_UTIL_PTI_DFRAME_LOC              6
-
-
-// [PTI_SL_RAIL_UTIL_PTI]$
-
+#define SL_DEBUG_SWV_PORT                       gpioPortA
+#define SL_DEBUG_SWV_PIN                        3
+// [GPIO_SL_DEBUG]$
 // <<< sl:end pin_tool >>>
 
-#endif // SL_RAIL_UTIL_PTI_CONFIG_H
+#endif // SL_DEBUG_SWO_CONFIG_H

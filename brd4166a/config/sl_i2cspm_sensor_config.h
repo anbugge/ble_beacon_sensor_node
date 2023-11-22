@@ -1,9 +1,9 @@
 /***************************************************************************//**
  * @file
- * @brief DEVICE_INIT_DCDC Config
+ * @brief I2CSPM Config
  *******************************************************************************
  * # License
- * <b>Copyright 2022 Silicon Laboratories Inc. www.silabs.com</b>
+ * <b>Copyright 2019 Silicon Laboratories Inc. www.silabs.com</b>
  *******************************************************************************
  *
  * SPDX-License-Identifier: Zlib
@@ -28,31 +28,46 @@
  *
  ******************************************************************************/
 
-#ifndef SL_DEVICE_INIT_DCDC_CONFIG_H
-#define SL_DEVICE_INIT_DCDC_CONFIG_H
+#ifndef SL_I2CSPM_SENSOR_CONFIG_H
+#define SL_I2CSPM_SENSOR_CONFIG_H
 
-// <<< Use Configuration Wizard in Context Menu >>>
+// <<< Use Configuration Wizard in Context Menu
 
-// <q SL_DEVICE_INIT_DCDC_ENABLE> Enable DC/DC Converter
-// <i>
-// <i> Default: 1
-#define SL_DEVICE_INIT_DCDC_ENABLE         1
+// <h>I2CSPM settings
 
-// <q SL_DEVICE_INIT_DCDC_BYPASS> Set DC/DC Converter in Bypass Mode
-// <i>
+// <o SL_I2CSPM_SENSOR_REFERENCE_CLOCK> Reference clock frequency
+// <i> Frequency in Hz of the reference clock.
+// <i> Select 0 to use the frequency of the currently selected clock.
 // <i> Default: 0
-#define SL_DEVICE_INIT_DCDC_BYPASS         0
+#define SL_I2CSPM_SENSOR_REFERENCE_CLOCK 0
 
-// <q SL_DEVICE_INIT_DCDC_PFMX_IPKVAL_OVERRIDE> Override for DCDC PFMX Mode Peak Current Setting
-// <i>
+// <o SL_I2CSPM_SENSOR_SPEED_MODE> Speed mode
+// <0=> Standard mode (100kbit/s)
+// <1=> Fast mode (400kbit/s)
+// <2=> Fast mode plus (1Mbit/s)
 // <i> Default: 0
-#define SL_DEVICE_INIT_DCDC_PFMX_IPKVAL_OVERRIDE  0
-
-// <o SL_DEVICE_INIT_DCDC_PFMX_IPKVAL> DCDC PFMX Mode Peak Current Setting <0-15>
-// <i>
-// <i> Default: DCDC_PFMXCTRL_IPKVAL_DEFAULT
-#define SL_DEVICE_INIT_DCDC_PFMX_IPKVAL    DCDC_PFMXCTRL_IPKVAL_DEFAULT
+#define SL_I2CSPM_SENSOR_SPEED_MODE      0
+// </h> end I2CSPM config
 
 // <<< end of configuration section >>>
 
-#endif // SL_DEVICE_INIT_DCDC_CONFIG_H
+// <<< sl:start pin_tool >>>
+// <i2c signal=SCL,SDA> SL_I2CSPM_SENSOR
+// $[I2C_SL_I2CSPM_SENSOR]
+#define SL_I2CSPM_SENSOR_PERIPHERAL              I2C1
+#define SL_I2CSPM_SENSOR_PERIPHERAL_NO           1
+
+// I2C1 SCL on PC5
+#define SL_I2CSPM_SENSOR_SCL_PORT                gpioPortC
+#define SL_I2CSPM_SENSOR_SCL_PIN                 5
+#define SL_I2CSPM_SENSOR_SCL_LOC                 17
+
+// I2C1 SDA on PC4
+#define SL_I2CSPM_SENSOR_SDA_PORT                gpioPortC
+#define SL_I2CSPM_SENSOR_SDA_PIN                 4
+#define SL_I2CSPM_SENSOR_SDA_LOC                 17
+
+// [I2C_SL_I2CSPM_SENSOR]$
+// <<< sl:end pin_tool >>>
+
+#endif // SL_I2CSPM_SENSOR_CONFIG_H

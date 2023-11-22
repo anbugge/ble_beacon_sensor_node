@@ -1,1 +1,7 @@
 */build
+*.bak
+*.bak0
+*.o
+.uceditor
+.vscode
+.settings

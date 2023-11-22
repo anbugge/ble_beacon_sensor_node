@@ -30,8 +30,9 @@ bool getTokenU8(uint32_t tokenAddr, uint8_t* value)
 bool getTokenFloat(uint32_t tokenAddr, float *value, int divisor, float defaultValue)
 {
   bool ret;
-  if (getTokenU32(tokenAddr, (uint32_t*)value)){
-    *value /= divisor;
+  uint32_t rawVal;
+  if (getTokenU32(tokenAddr, &rawVal)){
+    *value = (float)rawVal / (float)divisor;
     ret = true;
   }
   else {

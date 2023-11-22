@@ -1,3 +1,33 @@
+/***************************************************************************//**
+ * @file
+ * @brief Bluetooth Stack configuration
+ *******************************************************************************
+ * # License
+ * <b>Copyright 2023 Silicon Laboratories Inc. www.silabs.com</b>
+ *******************************************************************************
+ *
+ * SPDX-License-Identifier: Zlib
+ *
+ * The licensor of this software is Silicon Laboratories Inc.
+ *
+ * This software is provided 'as-is', without any express or implied warranty.
+ * In no event will the authors be held liable for any damages arising from the
+ * use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not
+ *    claim that you wrote the original software. If you use this software in a
+ *    product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+ *
+ ******************************************************************************/
+
 #ifndef SL_BLUETOOTH_CONFIG_H
 #define SL_BLUETOOTH_CONFIG_H
 #if defined(SL_COMPONENT_CATALOG_PRESENT)
@@ -29,18 +59,6 @@
 // <i> Default: 4
 // <i> Define the number of software timers the application needs.  Each timer needs resources from the stack to be implemented. Increasing amount of soft timers may cause degraded performance in some use cases.
 #define SL_BT_CONFIG_MAX_SOFTWARE_TIMERS     (4)
-
-#ifdef SL_CATALOG_BLUETOOTH_FEATURE_SYNC_PRESENT
-#include "sl_bluetooth_periodic_sync_config.h"
-#else
-#define SL_BT_CONFIG_MAX_PERIODIC_ADVERTISING_SYNC (0)
-#endif
-
-#ifdef SL_CATALOG_BLUETOOTH_FEATURE_L2CAP_PRESENT
-#include "sl_bluetooth_l2cap_config.h"
-#else
-#define SL_BT_CONFIG_USER_L2CAP_COC_CHANNELS (0)
-#endif
 
 // <o SL_BT_CONFIG_BUFFER_SIZE> Buffer memory size for Bluetooth stack
 // <i> Default: 3150
@@ -81,8 +99,9 @@
 // <i> Default: 0
 // <i> The Bluetooth stack takes TX RF path gain into account when adjusting transmitter
 // <i> output power. Power radiated from the antenna then matches the application request.
-// <i> For example, with radiated TX power set to +10 dBm and RF TX path
-// <i> gain to -1 dBm, the transmitter output power will be set to +11 dBm.
+// <i> A negative value indicates some power loss in the path. For example,
+// <i> with radiated TX power set to +10 dBm and this configuration to -10
+// <i> (i.e., 1 dBm loss), the transmitter output power will be set to +11 dBm.
 #define SL_BT_CONFIG_RF_PATH_GAIN_TX     (0)
 
 // <o SL_BT_CONFIG_RF_PATH_GAIN_RX> RF RX path gain in 0.1dBm unit
@@ -125,41 +144,18 @@ void sli_bt_rtos_stack_callback();
 
 #include "sl_bt_stack_config.h"
 
-// Set PA configuration default values if RAIL PA Config component presents:
-#ifdef SL_RAIL_UTIL_PA_CONFIG_HEADER
-#include SL_RAIL_UTIL_PA_CONFIG_HEADER
-#define BT_PA_CONFIG_STATE             SL_BT_RADIO_PA_CONFIG_ENABLED
-#define BT_PA_SELECTION                SL_RAIL_UTIL_PA_SELECTION_2P4GHZ
-#if SL_RAIL_UTIL_PA_VOLTAGE_MV == 3300
-#define BT_PA_POWER_SUPPLY             SL_BT_RADIO_PA_INPUT_VBAT
-#else
-#define BT_PA_POWER_SUPPLY             SL_BT_RADIO_PA_INPUT_DCDC
-#endif
-#else
-#define BT_PA_CONFIG_STATE             SL_BT_RADIO_PA_CONFIG_DISABLED
-#define BT_PA_SELECTION                0
-#define BT_PA_POWER_SUPPLY             0
-#endif // SL_RAIL_UTIL_PA_CONFIG_HEADER
-
-#define SL_BT_CONFIG_DEFAULT                                                   \
-  {                                                                            \
-    .config_flags = SL_BT_CONFIG_FLAGS,                                        \
-    .bluetooth.max_connections = SL_BT_CONFIG_MAX_CONNECTIONS_SUM,             \
-    .bluetooth.max_advertisers = SL_BT_CONFIG_MAX_ADVERTISERS,                 \
-    .bluetooth.max_periodic_sync = SL_BT_CONFIG_MAX_PERIODIC_ADVERTISING_SYNC, \
-    .bluetooth.max_l2cap_coc     = SL_BT_CONFIG_USER_L2CAP_COC_CHANNELS,       \
-    .bluetooth.max_buffer_memory = SL_BT_CONFIG_BUFFER_SIZE,                   \
-    .scheduler_callback = SL_BT_CONFIG_LL_CALLBACK,                            \
-    .stack_schedule_callback = SL_BT_CONFIG_STACK_CALLBACK,                    \
-    .gattdb = &gattdb,                                                         \
-    .max_timers = SL_BT_CONFIG_MAX_SOFTWARE_TIMERS,                            \
-    .rf.tx_gain = SL_BT_CONFIG_RF_PATH_GAIN_TX,                                \
-    .rf.rx_gain = SL_BT_CONFIG_RF_PATH_GAIN_RX,                                \
-    .rf.tx_min_power = SL_BT_CONFIG_MIN_TX_POWER,                              \
-    .rf.tx_max_power = SL_BT_CONFIG_MAX_TX_POWER,                              \
-    .pa.config_enable = BT_PA_CONFIG_STATE,                                    \
-    .pa.input = BT_PA_POWER_SUPPLY,                                            \
-    .pa.pa_mode = BT_PA_SELECTION,                                             \
+#define SL_BT_CONFIG_DEFAULT                                 \
+  {                                                          \
+    .config_flags = SL_BT_CONFIG_FLAGS,                      \
+    .bluetooth.max_buffer_memory = SL_BT_CONFIG_BUFFER_SIZE, \
+    .scheduler_callback = SL_BT_CONFIG_LL_CALLBACK,          \
+    .stack_schedule_callback = SL_BT_CONFIG_STACK_CALLBACK,  \
+    .gattdb = &gattdb,                                       \
+    .max_timers = SL_BT_CONFIG_MAX_SOFTWARE_TIMERS,          \
+    .rf.tx_gain = SL_BT_CONFIG_RF_PATH_GAIN_TX,              \
+    .rf.rx_gain = SL_BT_CONFIG_RF_PATH_GAIN_RX,              \
+    .rf.tx_min_power = SL_BT_CONFIG_MIN_TX_POWER,            \
+    .rf.tx_max_power = SL_BT_CONFIG_MAX_TX_POWER,            \
   }
 
 #endif // SL_BLUETOOTH_CONFIG_H

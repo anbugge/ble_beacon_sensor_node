@@ -48,7 +48,6 @@ component:
 - {id: printf}
 - {id: bluetooth_stack}
 - {id: component_catalog}
-- {id: bootloader_interface}
 - {id: rail_util_pti}
 - {id: app_assert}
 - {id: bluetooth_feature_gatt}

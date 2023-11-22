@@ -1,9 +1,9 @@
 /***************************************************************************//**
  * @file
- * @brief DEVICE_INIT_LFXO Config
+ * @brief Application Properties Header File
  *******************************************************************************
  * # License
- * <b>Copyright 2022 Silicon Laboratories Inc. www.silabs.com</b>
+ * <b>Copyright 2021 Silicon Laboratories Inc. www.silabs.com</b>
  *******************************************************************************
  *
  * SPDX-License-Identifier: Zlib
@@ -28,39 +28,38 @@
  *
  ******************************************************************************/
 
-#ifndef SL_DEVICE_INIT_LFXO_CONFIG_H
-#define SL_DEVICE_INIT_LFXO_CONFIG_H
+#ifndef APP_PROPERTIES_CONFIG_H
+#define APP_PROPERTIES_CONFIG_H
+
+#include "sl_application_type.h"
 
 // <<< Use Configuration Wizard in Context Menu >>>
 
-// <o SL_DEVICE_INIT_LFXO_MODE> Mode
-// <i>
-// <cmuLfxoOscMode_Crystal=> Crystal oscillator
-// <cmuLfxoOscMode_AcCoupledSine=> AC-coupled buffer
-// <cmuLfxoOscMode_External=> External digital clock
-// <i> Default: cmuLfxoOscMode_Crystal
-#define SL_DEVICE_INIT_LFXO_MODE           cmuLfxoOscMode_Crystal
+// <h>App Properties settings
 
-// <o SL_DEVICE_INIT_LFXO_CTUNE> CTUNE <0-127>
-// <i> Default: 63
-#define SL_DEVICE_INIT_LFXO_CTUNE          37
+// Type of signature this application is signed with
+// Default: APPLICATION_SIGNATURE_NONE(0)
+#define SL_APPLICATION_SIGNATURE               0
 
-// <o SL_DEVICE_INIT_LFXO_PRECISION> LFXO precision in PPM <0-65535>
-// <i> Default: 50
-#define SL_DEVICE_INIT_LFXO_PRECISION      100
+// Location of the signature
+// Default: 0xFFFFFFFF
+#define SL_APPLICATION_SIGNATURE_LOCATION      0xFFFFFFFF
 
-// <o SL_DEVICE_INIT_LFXO_TIMEOUT> Startup Timeout Delay
-// <i>
-// <cmuLfxoStartupDelay_2Cycles=> 2 cycles
-// <cmuLfxoStartupDelay_256Cycles=> 256 cycles
-// <cmuLfxoStartupDelay_1KCycles=> 1K cycles
-// <cmuLfxoStartupDelay_2KCycles=> 2K cycles
-// <cmuLfxoStartupDelay_4KCycles=> 4K cycles
-// <cmuLfxoStartupDelay_8KCycles=> 8K cycles
-// <cmuLfxoStartupDelay_16KCycles=> 16K cycles
-// <cmuLfxoStartupDelay_32KCycles=> 32K cycles
-// <i> Default: cmuLfxoStartupDelay_4KCycles
-#define SL_DEVICE_INIT_LFXO_TIMEOUT           cmuLfxoStartupDelay_4KCycles
-// <<< end of configuration section >>>
+// Bitfield representing type of application
+#define SL_APPLICATION_TYPE                    APPLICATION_TYPE
 
-#endif // SL_DEVICE_INIT_LFXO_CONFIG_H
+// <o SL_APPLICATION_VERSION> Version number for this application
+// <0-4294967295:1>
+// <i> Default: 1 [0-4294967295]
+#define SL_APPLICATION_VERSION                 1
+
+// Capabilities of this application
+// Default: 0
+#define SL_APPLICATION_CAPABILITIES            0
+
+//Product ID of the device for which the application is built
+#define SL_APPLICATION_PRODUCT_ID             { 0 }
+
+// </h>
+
+#endif // APP_PROPERTIES_CONFIG_H

@@ -7,6 +7,8 @@
 #include "sensors/rhtemp.h"
 #include "sensors/battery_voltage.h"
 
+#include "config/app_properties_config.h"
+
 #include "em_common.h"
 #include "em_rmu.h"
 #include "em_system.h"
@@ -30,19 +32,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// #define UINT16_TO_BYTES(n)            ((uint8_t) (n)), ((uint8_t)((n) >> 8))
-// #define UINT16_TO_BYTE0(n)            ((uint8_t) (n))
-// #define UINT16_TO_BYTE1(n)            ((uint8_t) ((n) >> 8))
-
-// #define UINT32_TO_BYTE0(n)            ((uint8_t) (n))
-// #define UINT32_TO_BYTE1(n)            ((uint8_t) ((n) >> 8))
-// #define UINT32_TO_BYTE2(n)            ((uint8_t) ((n) >> 16))
-// #define UINT32_TO_BYTE3(n)            ((uint8_t) ((n) >> 24))
-
-
-
 // CONFIG
-const uint8_t swVersion = 0x01;
+const uint8_t swVersion = 0x02;
+
 /* Force send a packet this number of seconds since last packet */
 const unsigned heartbeatTimebaseDelta = 30 * 60;
 
@@ -73,6 +65,8 @@ static const uint8_t *app_aesKey = TOKEN_TO_ARRAY(AES_KEY_ADDR);
 static int     app_txPower;
 static uint8_t app_pktCount;
 static uint8_t app_pktCountEvent;
+static bool    app_tick = false;
+static bool    app_sendPkt = false;
 
 // NVM3 keys
 const uint32_t RESET_COUNTER_KEY  = 0x01;
@@ -121,6 +115,7 @@ static uint8_t ctr[16] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 
 // static void advertise(void);
 static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data);
+static void tick(void);
 static void setPayload(void);
 static void encryptPayload(void);
 static void sendPacket(uint8_t pktCount);
@@ -190,50 +185,14 @@ void app_init(void)
  *****************************************************************************/
 void app_process_action(void)
 {
-}
-
-
-void app_enableSensor(SensorId id, uint32_t interval)
-{
-  if (id >= SENSOR_ID_COUNT){
-    dbg_printf("Invalid sensor ID: %d\r\n", id);
-    return;
-  }
-  sensorStates[id].enabled = true;
-  sensorStates[id].measurementInterval = interval;
-  sensorStates[id].lastMeasurementStarted = 0;
-
-  if (interval * 1000 < timeBase){
-    timeBase = interval * 1000;
-  }
-}
-
-
-
-
-
-void app_registerMeasurement(MeasurementType type, uint32_t value, bool send)
-{
-  dbg_printf("Register measurement: Type: %d, Value: %lu (Send: %d)\r\n", type, value, send);
-  if ( type == TemperatureMeasurement ) {
-    // Already converted to fit in int16_t
-    temperature = value;
-  }
-  else if ( type == RelHumidityMeasurement ) {
-    // Already converted to fit in uint8_t
-    relativeHumidity = value;
-  }
-  else {
-    if ( measurementCount < MAX_MEASUREMENT_COUNT ){
-      measurements[measurementCount] = (Measurement){type, value};
-      measurementCount++;
-    }
-    else {
-      dbg_printf("ERROR: %d > MAX_MEASUREMENT_COUNT (%d)\r\n", measurementCount+1, MAX_MEASUREMENT_COUNT);
-    }
+  if (app_tick){
+    app_tick = false;
+    tick();
   }
 
-  if ( send ){
+  if (app_sendPkt) {
+    app_sendPkt = false;
+
     uint32_t uptime = sl_sleeptimer_get_time();
     uint8_t pktCount = app_pktCount;
     if (measurementCount > 0) {
@@ -250,10 +209,7 @@ void app_registerMeasurement(MeasurementType type, uint32_t value, bool send)
   }
 }
 
-static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
-{
-  (void)handle;
-  (void)data;
+void tick(void) {
   static uint32_t initSequenceStage = 0;
   sl_status_t sc;
 
@@ -309,12 +265,64 @@ static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
 }
 
 
+void app_enableSensor(SensorId id, uint32_t interval)
+{
+  if (id >= SENSOR_ID_COUNT){
+    dbg_printf("Invalid sensor ID: %d\r\n", id);
+    return;
+  }
+  sensorStates[id].enabled = true;
+  sensorStates[id].measurementInterval = interval;
+  sensorStates[id].lastMeasurementStarted = 0;
+
+  if (interval * 1000 < timeBase){
+    timeBase = interval * 1000;
+  }
+}
+
+
+
+
+
+void app_registerMeasurement(MeasurementType type, uint32_t value, bool send)
+{
+  dbg_printf("Register measurement: Type: %d, Value: %lu (Send: %d)\r\n", type, value, send);
+  if ( type == TemperatureMeasurement ) {
+    // Already converted to fit in int16_t
+    temperature = value;
+  }
+  else if ( type == RelHumidityMeasurement ) {
+    // Already converted to fit in uint8_t
+    relativeHumidity = value;
+  }
+  else {
+    if ( measurementCount < MAX_MEASUREMENT_COUNT ){
+      measurements[measurementCount] = (Measurement){type, value};
+      measurementCount++;
+    }
+    else {
+      dbg_printf("ERROR: %d > MAX_MEASUREMENT_COUNT (%d)\r\n", measurementCount+1, MAX_MEASUREMENT_COUNT);
+    }
+  }
+
+  if ( send ){
+    app_sendPkt = true;
+  }
+}
+
+static void timebaseTick(sl_sleeptimer_timer_handle_t *handle, void *data)
+{
+  (void)handle;
+  (void)data;
+  app_tick = true;
+}
+
 static void sendPacket(uint8_t numPackets){
   sl_status_t sc;
 
   // Set custom advertising data.
   sc = sl_bt_advertiser_set_data(advertising_set_handle,
-                                 0,
+                                 sl_bt_advertiser_advertising_data_packet,
                                  sizeof(packet),
                                  (uint8_t *)(&packet)
                                  );
@@ -545,7 +553,7 @@ void initNonce(void){
 
   uint8_t sha[32];
 
-  int stat = mbedtls_sha256_ret(mac, 6, sha, 0);
+  int stat = mbedtls_sha256(mac, 6, sha, 0);
   app_assert(stat == 0, "SHA256 failed");
 
   // Use first 12 bytes of Sha for counter

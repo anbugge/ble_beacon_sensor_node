@@ -29,6 +29,12 @@ FEATURE_HALL         : 0x0
 FEATURE_ALS          : 0x0
 FEATURE_BUTTONS      : 0x0
 
+# Number of packets to send on regular updates
+PKT_COUNT : 0x1
+
+# Number of packet to send on events
+PKT_COUNT_EVENT : 0x3
+
 # Wake up every TIME_BASE seconds
 # 30 s -> = 0x1E
 RH_SENSING_TIME_BASE : 0x1E
@@ -44,8 +50,9 @@ RH_DIFF_THRESHOLD  : 0x32
 
 HALL_THRESHOLD       : 0xFFFFFFFF
 
-# 0.1 * x dBm diff required to trigger an update
+# 0.1 * x dBm TX power
 # 10 dBm % -> 100 = 0x64
+# 6 dBm % -> 60 = 0x3C
 TX_POWER             : 0x64
 
 AES_KEY              : FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF

@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #if DEBUG_OUT
 #define dbg_printf(...) printf(__VA_ARGS__)
@@ -47,9 +48,8 @@ bool rhtemp_init(void)
     dbg_printf("SI7021 init failed, return value: 0x%lx\r\n", sc);
     return false;
   }
-
-  getTokenFloat(TEMP_DIFF_THRESHOLD_ADDR, &tempDiffThreshold, 100, 0.5f);
-  getTokenFloat(RH_DIFF_THRESHOLD_ADDR, &humDiffThreshold, 10, 1.0f);
+  getTokenFloat(TEMP_DIFF_THRESHOLD_ADDR, &tempDiffThreshold, 1000, 0.5f);
+  getTokenFloat(RH_DIFF_THRESHOLD_ADDR, &humDiffThreshold, 100, 1.0f);
   if (!getTokenU32(RH_SENSING_TIME_BASE_ADDR, &timeBase)){
     timeBase = 30;
   }
@@ -125,8 +125,8 @@ static void readMeasurement(sl_sleeptimer_timer_handle_t *handle, void *data)
 
   // Send if a value has changed significantly
   if (
-     abs( temperatureF      - lastTemperature )      > tempDiffThreshold ||
-     abs( relativeHumidityF - lastRelativeHumidity ) > humDiffThreshold
+     fabs( temperatureF      - lastTemperature )      > tempDiffThreshold ||
+     fabs( relativeHumidityF - lastRelativeHumidity ) > humDiffThreshold
      ) {
     sending = true;
     lastTemperature      = temperatureF;
