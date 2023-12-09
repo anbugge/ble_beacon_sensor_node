@@ -7,13 +7,13 @@
 #include "sensors/rhtemp.h"
 #include "sensors/battery_voltage.h"
 
-#include "config/app_properties_config.h"
 
 #include "em_common.h"
 #include "em_rmu.h"
 #include "em_system.h"
 #include "em_msc.h"
 #include "em_cmu.h"
+#include "em_emu.h"
 
 #include "app_assert.h"
 #include "sl_bluetooth.h"
@@ -170,6 +170,9 @@ static void initSensors(void)
  *****************************************************************************/
 void app_init(void)
 {
+  EMU_EM23Init_TypeDef em23init = EMU_EM23INIT_DEFAULT;
+  em23init.vScaleEM23Voltage = emuVScaleEM23_LowPower;
+  EMU_EM23Init(&em23init);
   sl_sleeptimer_init();
   app_board_init();
   if (!initTokens()){

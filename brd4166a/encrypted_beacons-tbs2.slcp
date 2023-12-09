@@ -32,6 +32,7 @@ component:
 - {id: bluetooth_feature_connection}
 - {id: bluetooth_feature_gatt_server}
 - {id: brd4166a}
+- {id: mx25_flash_shutdown_usart}
 - {id: bluetooth_feature_advertiser}
 - {id: nvm3_lib}
 - instance: [vcom]

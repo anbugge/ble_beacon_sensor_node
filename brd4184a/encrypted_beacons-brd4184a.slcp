@@ -49,6 +49,7 @@ component:
 - {id: printf}
 - {id: component_catalog}
 - {id: brd4184a}
+- {id: mx25_flash_shutdown_usart}
 - {id: app_assert}
 - {id: sensor_rht}
 - {id: EFR32BG22C224F512IM40}
