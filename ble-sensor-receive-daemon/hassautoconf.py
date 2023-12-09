@@ -41,7 +41,10 @@ def register_sensor(client,
         if "identifiers" not in device:
             device["identifiers"] = config["unique_id"]
         config["device"] = device
+        device_name = device["name"]
 
+    else:
+        device_name = title
 
     if availability:
         config["availability_topic"] = sensor_topic_base + delimiter + "status"
@@ -93,9 +96,9 @@ def register_sensor(client,
         config = {}
 
 
-    disctopic = BASE + "/sensor/" + clean_as_topic(title) + "-" + sensor_type + "/config"
+    disctopic = BASE + "/sensor/" + clean_as_topic(device_name) + "-" + sensor_type + "/config"
     client.publish(disctopic, json.dumps(config, ensure_ascii=False).encode("utf-8"), retain=True)
-    print("Registering sensor " + title)
+    print(f"Registering sensor {title} ({unique_id})")
 
 def clean_as_topic(s):
     s = s.lower()
